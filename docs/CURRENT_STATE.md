@@ -50,7 +50,8 @@ Current real-benchmark smoke:
 - all 17 IBM benchmarks valid
 - average proxy `1.4570`
 - total hard overlaps `0`
-- max local runtime `30.63s`
+- max local runtime `32.92s`
+- summary commit `cb3a747`, dirty state `false`
 - `ibm01` proxy `1.0388`
 - wirelength `0.064`
 - density `0.813`

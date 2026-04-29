@@ -75,8 +75,9 @@ Aggregate result:
 
 - average proxy: `1.4570`
 - total hard overlaps: `0`
-- max local runtime: `30.63s`
+- max local runtime: `32.92s`
 - benchmark validity: all 17 IBM benchmarks valid
+- summary commit: `cb3a747`, dirty state `false`
 
 Interpretation:
 
