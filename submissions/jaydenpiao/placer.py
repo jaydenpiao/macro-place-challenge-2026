@@ -43,7 +43,7 @@ class JaydenPiaoPlacer:
         self.config = PlacerConfig(
             seed=seed if seed is not None else _env_int("JAYDEN_PLACER_SEED", 20260429),
             search_iters=(
-                search_iters if search_iters is not None else _env_int("JAYDEN_SEARCH_ITERS", 4000)
+                search_iters if search_iters is not None else _env_int("JAYDEN_SEARCH_ITERS", 0)
             ),
             legal_gap=legal_gap if legal_gap is not None else _env_float("JAYDEN_LEGAL_GAP", 0.01),
         )

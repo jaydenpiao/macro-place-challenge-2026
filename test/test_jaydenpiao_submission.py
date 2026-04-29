@@ -1,10 +1,13 @@
 from pathlib import Path
 
+import pytest
 import torch
 
 from macro_place.benchmark import Benchmark
 from macro_place.evaluate import _load_placer
+from macro_place.loader import load_benchmark_from_dir
 from macro_place.objective import compute_overlap_metrics
+from macro_place.utils import validate_placement
 
 
 def _benchmark(
@@ -70,6 +73,31 @@ def test_placer_repairs_hard_macro_overlaps_and_preserves_soft_macros():
     assert torch.equal(placement[2], benchmark.macro_positions[2])
 
 
+def test_placer_clamps_movable_soft_macros_inside_canvas_bounds():
+    benchmark = _benchmark(
+        positions=torch.tensor(
+            [
+                [2.0, 2.0],
+                [11.0, 8.0],
+            ]
+        ),
+        sizes=torch.tensor(
+            [
+                [2.0, 2.0],
+                [2.0, 2.0],
+            ]
+        ),
+        fixed=torch.tensor([False, False]),
+        num_hard=1,
+    )
+    placer = _load_placer(Path("submissions/jaydenpiao/placer.py"))
+
+    placement = placer.place(benchmark)
+
+    assert placement[1, 0] <= 9.0
+    assert placement[1, 1] == benchmark.macro_positions[1, 1]
+
+
 def test_placer_keeps_fixed_hard_macro_position_while_legalizing():
     benchmark = _benchmark(
         positions=torch.tensor(
@@ -94,3 +122,20 @@ def test_placer_keeps_fixed_hard_macro_position_while_legalizing():
 
     assert overlaps["overlap_count"] == 0
     assert torch.equal(placement[0], benchmark.macro_positions[0])
+
+
+def test_placer_legalizer_only_is_valid_on_ibm06(monkeypatch):
+    benchmark_dir = Path("external/MacroPlacement/Testcases/ICCAD04/ibm06")
+    if not benchmark_dir.exists():
+        pytest.skip("TILOS submodule not initialized")
+
+    monkeypatch.setenv("JAYDEN_SEARCH_ITERS", "0")
+    benchmark, _ = load_benchmark_from_dir(str(benchmark_dir))
+    placer = _load_placer(Path("submissions/jaydenpiao/placer.py"))
+
+    placement = placer.place(benchmark)
+    overlaps = compute_overlap_metrics(placement, benchmark)
+    valid, violations = validate_placement(placement, benchmark)
+
+    assert overlaps["overlap_count"] == 0
+    assert valid, violations

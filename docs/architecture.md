@@ -45,9 +45,9 @@ The harness must record:
 The first durable lane is a legalizer-first hybrid:
 
 1. Start from official initial macro positions.
-2. Clamp movable hard macros inside canvas bounds.
+2. Clamp movable macros inside canvas bounds.
 3. Repair hard-macro overlaps with a positive gap.
-4. Use fast hypergraph surrogate search to improve wirelength without breaking legality.
+4. Optionally use fast hypergraph surrogate search to improve wirelength without breaking legality.
 5. Keep soft macros stable unless a tested optimizer improves proxy and routability.
 6. Evaluate with the official proxy only at candidate boundaries.
 

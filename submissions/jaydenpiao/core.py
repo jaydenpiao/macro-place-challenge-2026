@@ -16,7 +16,7 @@ from macro_place.benchmark import Benchmark
 @dataclass(frozen=True)
 class PlacerConfig:
     seed: int = 20260429
-    search_iters: int = 4000
+    search_iters: int = 0
     legal_gap: float = 0.01
 
 
@@ -70,8 +70,19 @@ def build_placement(benchmark: Benchmark, config: PlacerConfig | None = None) ->
             gap=float(config.legal_gap),
         )
 
-    placement[:n_hard] = torch.tensor(hard_pos, dtype=placement.dtype)
-    return placement
+    all_pos = placement.detach().cpu().numpy().astype(np.float64, copy=True)
+    all_sizes = benchmark.macro_sizes.detach().cpu().numpy().astype(np.float64, copy=True)
+    all_movable = (~benchmark.macro_fixed).detach().cpu().numpy().astype(bool, copy=True)
+    all_pos[:n_hard] = hard_pos
+    _clamp_movable_to_canvas(
+        all_pos,
+        all_sizes,
+        all_movable,
+        float(benchmark.canvas_width),
+        float(benchmark.canvas_height),
+    )
+
+    return torch.tensor(all_pos, dtype=placement.dtype)
 
 
 def legalize_hard_macros(
@@ -110,6 +121,15 @@ def legalize_hard_macros(
                 gap,
             )
 
+    for _ in range(max_passes):
+        moved = False
+        for i, j in _overlap_pairs(pos, sizes, gap):
+            if not movable[i] and not movable[j]:
+                continue
+            moved |= _separate_pair(pos, sizes, movable, canvas_width, canvas_height, gap, i, j)
+        if not moved:
+            break
+
     _clamp_movable_to_canvas(pos, sizes, movable, canvas_width, canvas_height)
     return pos
 
@@ -121,11 +141,20 @@ def _clamp_movable_to_canvas(
     canvas_width: float,
     canvas_height: float,
 ) -> None:
+    margin = 1.0e-4
     for idx in np.where(movable)[0]:
         half_w = sizes[idx, 0] / 2.0
         half_h = sizes[idx, 1] / 2.0
-        pos[idx, 0] = float(np.clip(pos[idx, 0], half_w, canvas_width - half_w))
-        pos[idx, 1] = float(np.clip(pos[idx, 1], half_h, canvas_height - half_h))
+        min_x = half_w + margin
+        max_x = canvas_width - half_w - margin
+        min_y = half_h + margin
+        max_y = canvas_height - half_h - margin
+        if min_x > max_x:
+            min_x = max_x = canvas_width / 2.0
+        if min_y > max_y:
+            min_y = max_y = canvas_height / 2.0
+        pos[idx, 0] = float(np.clip(pos[idx, 0], min_x, max_x))
+        pos[idx, 1] = float(np.clip(pos[idx, 1], min_y, max_y))
 
 
 def _overlap_pairs(pos: np.ndarray, sizes: np.ndarray, gap: float) -> Iterable[tuple[int, int]]:

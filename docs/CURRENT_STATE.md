@@ -43,21 +43,26 @@ The official final entry point is:
 submissions/jaydenpiao/placer.py
 ```
 
-Initial real-benchmark smoke:
+Current real-benchmark smoke:
 
-- `uv run evaluate submissions/jaydenpiao/placer.py -b ibm01`
-- proxy `1.0560`
+- `uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-legalizer-valid`
+- `uv run python scripts/check_results.py results/all-ibm-legalizer-valid/summary.json --max-runtime 3300 --max-avg-proxy 1.4578`
+- all 17 IBM benchmarks valid
+- average proxy `1.4570`
+- total hard overlaps `0`
+- max local runtime `30.63s`
+- `ibm01` proxy `1.0388`
 - wirelength `0.064`
-- density `0.832`
-- congestion `1.152`
+- density `0.813`
+- congestion `1.137`
 - overlaps `0`
-- runtime `2.14s`
+- runtime `2.21s`
 
-The current implementation is a deterministic legalizer-first baseline with hypergraph local search. Score improvements should be isolated in small PRs.
+The current implementation is a deterministic legalizer-first baseline. Hypergraph local search exists behind `JAYDEN_SEARCH_ITERS`, but defaults to `0` because the legalizer-only path is currently the validated all-IBM baseline. Score improvements should be isolated in small PRs.
 
 ## Next Priorities
 
-1. Run all-IBM locally if feasible; otherwise run on cloud GPU/Ubuntu.
-2. Push `infra/bootstrap-foundation` and open a draft PR for the bootstrap slice.
-3. Watch GitHub Actions CI on the PR.
-4. Iterate on hybrid analytical placement plus local search.
+1. Push `infra/bootstrap-foundation` and open a draft PR for the bootstrap slice.
+2. Watch GitHub Actions CI on the PR.
+3. Reproduce the all-IBM run in a clean cloud Ubuntu/GPU evaluator.
+4. Iterate on hybrid analytical placement plus local search to chase the top-7 cutoff.

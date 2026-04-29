@@ -31,6 +31,8 @@ Open hypotheses:
 
 ## 2026-04-29 - Initial JaydenPiao placer smoke
 
+Historical note: this smoke was recorded before the default `JAYDEN_SEARCH_ITERS` was changed to `0`. Treat the all-IBM legalizer-only run below as the current baseline.
+
 Command:
 
 ```bash
@@ -59,3 +61,25 @@ uv run python scripts/check_results.py results/smoke-ibm01/summary.json --max-ru
 ```
 
 The generated `summary.json` passed legality, runtime, and RePlAce-threshold checks for the single-benchmark smoke.
+
+## 2026-04-29 - Legalizer-only all-IBM baseline
+
+Command:
+
+```bash
+uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-legalizer-valid
+uv run python scripts/check_results.py results/all-ibm-legalizer-valid/summary.json --max-runtime 3300 --max-avg-proxy 1.4578
+```
+
+Aggregate result:
+
+- average proxy: `1.4570`
+- total hard overlaps: `0`
+- max local runtime: `30.63s`
+- benchmark validity: all 17 IBM benchmarks valid
+
+Interpretation:
+
+- The default legalizer-only configuration clears the first RePlAce-style promotion gate locally.
+- It is still above the public top-7 proxy cutoff, so the next scoring work should target congestion-heavy cases such as `ibm17`, `ibm18`, `ibm06`, `ibm12`, `ibm15`, and `ibm14`.
+- This result still needs cloud Ubuntu/GPU and official Docker parity before leaderboard submission.
