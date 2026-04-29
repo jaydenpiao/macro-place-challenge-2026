@@ -6,8 +6,9 @@ Last updated: 2026-04-29
 
 - Fork: `https://github.com/jaydenpiao/macro-place-challenge-2026`
 - Upstream: `https://github.com/partcleda/macro-place-challenge-2026`
-- Primary working branch: `infra/bootstrap-foundation`
-- Local implementation worktree: `/Users/jaydenpiao/.config/superpowers/worktrees/macro-place-challenge-2026/bootstrap-foundation`
+- Primary working branch: `main`
+- Local primary clone: `/Users/jaydenpiao/Desktop/hrt_challenge/macro-place-challenge-2026`
+- Bootstrap PR: `https://github.com/jaydenpiao/macro-place-challenge-2026/pull/1` merged into `main`
 
 ## Verified Baseline
 
@@ -63,7 +64,7 @@ The current implementation is a deterministic legalizer-first baseline. Hypergra
 
 ## Next Priorities
 
-1. Push `infra/bootstrap-foundation` and open a draft PR for the bootstrap slice.
-2. Watch GitHub Actions CI on the PR.
-3. Reproduce the all-IBM run in a clean cloud Ubuntu/GPU evaluator.
-4. Iterate on hybrid analytical placement plus local search to chase the top-7 cutoff.
+1. Reproduce the all-IBM run in a clean cloud Ubuntu/GPU evaluator.
+2. Run the official air-gapped Docker path before any leaderboard submission.
+3. Iterate on hybrid analytical placement plus local search to chase the top-7 cutoff.
+4. Run NG45/OpenROAD-flow-scripts checks for finalist candidates.
