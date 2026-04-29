@@ -41,15 +41,22 @@ ABS_PLACER="$(cd "$REPO_ROOT" && realpath "$PLACER_PATH")"
 PLACER_DIR="$(dirname "$ABS_PLACER")"
 PLACER_FILE="$(basename "$ABS_PLACER")"
 
-# Build mount arguments
-# Always mount the placer's directory
-MOUNT_ARGS="-v $PLACER_DIR:/submission:ro"
+# Build mount arguments. Always mount the placer's directory.
+MOUNT_ARGS=("-v" "$PLACER_DIR:/submission:ro")
 
 # Mount any extra directories (e.g., bundled DREAMPlace package)
 for extra in "$@"; do
     ABS_EXTRA="$(cd "$REPO_ROOT" && realpath "$extra")"
     BASE_EXTRA="$(basename "$ABS_EXTRA")"
-    MOUNT_ARGS="$MOUNT_ARGS -v $ABS_EXTRA:/submission/$BASE_EXTRA:ro"
+    MOUNT_ARGS+=("-v" "$ABS_EXTRA:/submission/$BASE_EXTRA:ro")
+done
+
+# Forward known deterministic placer knobs into the air-gapped evaluator.
+ENV_ARGS=()
+for name in JAYDEN_PLACER_SEED JAYDEN_SEARCH_ITERS JAYDEN_LEGAL_GAP JAYDEN_TRANSFORM; do
+    if [[ -n "${!name:-}" ]]; then
+        ENV_ARGS+=("-e" "$name=${!name}")
+    fi
 done
 
 echo "=== Evaluating: $TEAM ==="
@@ -64,7 +71,8 @@ timeout 7200 docker run --rm \
     --gpus all \
     --memory 64g \
     --cpus 16 \
-    $MOUNT_ARGS \
+    "${ENV_ARGS[@]}" \
+    "${MOUNT_ARGS[@]}" \
     "$IMAGE_NAME" \
     "/submission/$PLACER_FILE" --all \
     2>&1 | tee "$RESULTS_DIR/${TEAM}.log"
