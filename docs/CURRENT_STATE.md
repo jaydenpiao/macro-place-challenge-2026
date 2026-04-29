@@ -51,8 +51,8 @@ Current real-benchmark smoke:
 - all 17 IBM benchmarks valid
 - average proxy `1.4559`
 - total hard overlaps `0`
-- max local runtime `30.97s`
-- summary dirty state `true` until the score recipe branch is committed and rerun
+- max local runtime `30.87s`
+- summary commit `9f7c1ac`, dirty state `false`
 - `ibm01` proxy `1.0385`
 - wirelength `0.067`
 - density `0.813`
@@ -64,7 +64,7 @@ The current implementation is a deterministic legalizer-first baseline with chea
 
 ## Next Priorities
 
-1. Commit the score recipe branch, rerun all-IBM clean, and merge it through PR.
+1. Merge the score recipe branch through PR.
 2. Reproduce the all-IBM run in a clean cloud Ubuntu/GPU evaluator.
 3. Run the official air-gapped Docker path before any leaderboard submission.
 4. Iterate on hybrid analytical placement plus local search to chase the top-7 cutoff.

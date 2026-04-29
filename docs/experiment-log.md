@@ -118,9 +118,9 @@ Aggregate result:
 
 - average proxy: `1.4559`
 - total hard overlaps: `0`
-- max local runtime: `30.97s`
+- max local runtime: `30.87s`
 - benchmark validity: all 17 IBM benchmarks valid
-- summary dirty state: `true` until the branch is committed and rerun
+- summary commit: `9f7c1ac`, dirty state `false`
 
 Interpretation:
 
