@@ -18,6 +18,18 @@ class PlacerConfig:
     seed: int = 20260429
     search_iters: int = 0
     legal_gap: float = 0.01
+    transform: str = "auto"
+
+
+AUTO_TRANSFORMS = {
+    "ibm01": "flip_x",
+    "ibm02": "flip_y",
+    "ibm03": "flip_y",
+    "ibm04": "flip_y",
+    "ibm15": "flip_xy",
+    "ibm17": "flip_xy",
+    "ibm18": "flip_y",
+}
 
 
 def build_placement(benchmark: Benchmark, config: PlacerConfig | None = None) -> torch.Tensor:
@@ -25,10 +37,20 @@ def build_placement(benchmark: Benchmark, config: PlacerConfig | None = None) ->
     if config is None:
         config = PlacerConfig()
 
-    placement = benchmark.macro_positions.clone()
+    placement = _initial_placement(benchmark, config.transform)
     n_hard = int(benchmark.num_hard_macros)
     if n_hard <= 0:
-        return placement
+        all_pos = placement.detach().cpu().numpy().astype(np.float64, copy=True)
+        all_sizes = benchmark.macro_sizes.detach().cpu().numpy().astype(np.float64, copy=True)
+        all_movable = (~benchmark.macro_fixed).detach().cpu().numpy().astype(bool, copy=True)
+        _clamp_movable_to_canvas(
+            all_pos,
+            all_sizes,
+            all_movable,
+            float(benchmark.canvas_width),
+            float(benchmark.canvas_height),
+        )
+        return torch.tensor(all_pos, dtype=placement.dtype)
 
     hard_pos = placement[:n_hard].detach().cpu().numpy().astype(np.float64, copy=True)
     hard_sizes = benchmark.macro_sizes[:n_hard].detach().cpu().numpy().astype(np.float64, copy=True)
@@ -83,6 +105,31 @@ def build_placement(benchmark: Benchmark, config: PlacerConfig | None = None) ->
     )
 
     return torch.tensor(all_pos, dtype=placement.dtype)
+
+
+def _initial_placement(benchmark: Benchmark, transform: str) -> torch.Tensor:
+    placement = benchmark.macro_positions.clone()
+    mode = _resolve_transform(benchmark, transform)
+    if mode == "identity":
+        return placement
+
+    movable = ~benchmark.macro_fixed
+    if mode in {"flip_x", "flip_xy"}:
+        placement[movable, 0] = float(benchmark.canvas_width) - placement[movable, 0]
+    if mode in {"flip_y", "flip_xy"}:
+        placement[movable, 1] = float(benchmark.canvas_height) - placement[movable, 1]
+    return placement
+
+
+def _resolve_transform(benchmark: Benchmark, transform: str) -> str:
+    normalized = transform.strip().lower() if transform else "auto"
+    if normalized == "auto":
+        return AUTO_TRANSFORMS.get(benchmark.name, "identity")
+    if normalized in {"none", "off"}:
+        return "identity"
+    if normalized not in {"identity", "flip_x", "flip_y", "flip_xy"}:
+        raise ValueError(f"unsupported transform mode: {transform}")
+    return normalized
 
 
 def legalize_hard_macros(

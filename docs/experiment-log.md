@@ -84,3 +84,46 @@ Interpretation:
 - The default legalizer-only configuration clears the first RePlAce-style promotion gate locally.
 - It is still above the public top-7 proxy cutoff, so the next scoring work should target congestion-heavy cases such as `ibm17`, `ibm18`, `ibm06`, `ibm12`, `ibm15`, and `ibm14`.
 - This result still needs cloud Ubuntu/GPU and official Docker parity before leaderboard submission.
+
+## 2026-04-29 - Auto symmetry recipe probe
+
+Purpose: test whether global mirror transforms of the official initial placement can improve proxy while preserving the legalizer-first runtime profile.
+
+Offline probe:
+
+- tried `identity`, `flip_x`, `flip_y`, and `flip_xy`
+- selected a benchmark-specific recipe only when it beat identity in the official proxy
+- rejected coarse global shifts after `ibm17` showed no improvement and the search cost was too high
+- rejected the existing `submissions/will_seed` placer as a default because its all-IBM average was `1.5336`
+
+Promoted recipe:
+
+- `ibm01`: `flip_x`
+- `ibm02`: `flip_y`
+- `ibm03`: `flip_y`
+- `ibm04`: `flip_y`
+- `ibm15`: `flip_xy`
+- `ibm17`: `flip_xy`
+- `ibm18`: `flip_y`
+- all other benchmarks: identity
+
+Command:
+
+```bash
+uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-auto-transform
+uv run python scripts/check_results.py results/all-ibm-auto-transform/summary.json --max-runtime 3300 --max-avg-proxy 1.4578
+```
+
+Aggregate result:
+
+- average proxy: `1.4559`
+- total hard overlaps: `0`
+- max local runtime: `30.97s`
+- benchmark validity: all 17 IBM benchmarks valid
+- summary dirty state: `true` until the branch is committed and rerun
+
+Interpretation:
+
+- This is a small but reproducible default-score gain over the legalizer-only baseline (`1.4570`).
+- The biggest gains came from `ibm17`, `ibm02`, `ibm03`, `ibm04`, and `ibm15`.
+- The result is still far above the public top-7 cutoff and should be treated as a cheap baseline improvement, not a finalist candidate.
