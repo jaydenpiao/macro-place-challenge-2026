@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Macro Placement Experiment Summary",
+  "type": "object",
+  "required": ["schema_version", "run_id", "placer_path", "command", "git", "environment", "benchmarks", "aggregate"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "placer_path": { "type": "string", "minLength": 1 },
+    "command": { "type": "string", "minLength": 1 },
+    "git": {
+      "type": "object",
+      "required": ["commit", "upstream_commit", "dirty"],
+      "properties": {
+        "commit": { "type": "string" },
+        "upstream_commit": { "type": "string" },
+        "dirty": { "type": "boolean" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["python", "platform", "machine"],
+      "properties": {
+        "python": { "type": "string" },
+        "platform": { "type": "string" },
+        "machine": { "type": "string" }
+      }
+    },
+    "benchmarks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "proxy_cost", "wirelength", "density", "congestion", "overlaps", "runtime", "valid"],
+        "properties": {
+          "name": { "type": "string" },
+          "proxy_cost": { "type": "number" },
+          "wirelength": { "type": "number" },
+          "density": { "type": "number" },
+          "congestion": { "type": "number" },
+          "overlaps": { "type": "integer" },
+          "runtime": { "type": "number" },
+          "valid": { "type": "boolean" }
+        }
+      }
+    },
+    "aggregate": {
+      "type": "object",
+      "required": ["average_proxy", "total_overlaps", "total_runtime", "max_runtime"],
+      "properties": {
+        "average_proxy": { "type": "number" },
+        "total_overlaps": { "type": "integer" },
+        "total_runtime": { "type": "number" },
+        "max_runtime": { "type": "number" }
+      }
+    }
+  }
+}
