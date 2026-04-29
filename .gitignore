@@ -88,6 +88,14 @@ scripts/run_rowpack_ibm.py
 scripts/visualize_*.py
 scripts/__pycache__/
 docs/
+!docs/
+!docs/CURRENT_STATE.md
+!docs/architecture.md
+!docs/experiment-log.md
+!docs/agents/
+!docs/agents/*.md
+!docs/prompts/
+!docs/prompts/*.md
 output/
 BENCHMARK_EVALUATION_RESULTS.md
 NETLIST_CLEANING_SUMMARY.md
