@@ -93,11 +93,13 @@ docs/
 !docs/
 !docs/CURRENT_STATE.md
 !docs/architecture.md
+!docs/cloud-parity.md
 !docs/experiment-log.md
 !docs/agents/
 !docs/agents/*.md
 !docs/prompts/
 !docs/prompts/*.md
 output/
+os_debug.txt
 BENCHMARK_EVALUATION_RESULTS.md
 NETLIST_CLEANING_SUMMARY.md

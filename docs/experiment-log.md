@@ -127,3 +127,27 @@ Interpretation:
 - This is a small but reproducible default-score gain over the legalizer-only baseline (`1.4570`).
 - The biggest gains came from `ibm17`, `ibm02`, `ibm03`, `ibm04`, and `ibm15`.
 - The result is still far above the public top-7 cutoff and should be treated as a cheap baseline improvement, not a finalist candidate.
+
+## 2026-04-29 - Soft macro optimizer timeout
+
+Purpose: test whether the official `PlacementCost.optimize_stdcells` helper is viable as a cheap soft-macro co-optimization lane after hard legalization.
+
+Probe:
+
+```bash
+timeout 300 uv run python -u - <<'PY'
+# loaded ibm06, applied the current JaydenPiao placer, then called:
+# plc.optimize_stdcells(num_steps=[10, 10, 10], max_move_distance=[canvas / 100] * 3, ...)
+PY
+```
+
+Result:
+
+- `ibm06` base proxy before the call: `1.6966678`
+- `[10, 10, 10]` soft-macro optimization did not finish within `300s`
+- the helper emitted a large `os_debug.txt` file, now ignored in `.gitignore`
+
+Interpretation:
+
+- Do not use `PlacementCost.optimize_stdcells` in the default runtime path.
+- Revisit only as a cloud-only experiment with strict timeout accounting and a saved result summary.

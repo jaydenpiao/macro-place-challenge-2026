@@ -9,6 +9,7 @@ Last updated: 2026-04-29
 - Primary working branch: `main`
 - Local primary clone: `/Users/jaydenpiao/Desktop/hrt_challenge/macro-place-challenge-2026`
 - Bootstrap PR: `https://github.com/jaydenpiao/macro-place-challenge-2026/pull/1` merged into `main`
+- Score recipe PR: `https://github.com/jaydenpiao/macro-place-challenge-2026/pull/2` merged into `main`
 
 ## Verified Baseline
 
@@ -64,8 +65,7 @@ The current implementation is a deterministic legalizer-first baseline with chea
 
 ## Next Priorities
 
-1. Merge the score recipe branch through PR.
-2. Reproduce the all-IBM run in a clean cloud Ubuntu/GPU evaluator.
-3. Run the official air-gapped Docker path before any leaderboard submission.
-4. Iterate on hybrid analytical placement plus local search to chase the top-7 cutoff.
-5. Run NG45/OpenROAD-flow-scripts checks for finalist candidates.
+1. Reproduce the all-IBM run in a clean cloud Ubuntu/GPU evaluator with `scripts/run_cloud_parity.sh`.
+2. Run the official air-gapped Docker path before any leaderboard submission.
+3. Iterate on hybrid analytical placement plus local search to chase the top-7 cutoff.
+4. Run NG45/OpenROAD-flow-scripts checks for finalist candidates.
