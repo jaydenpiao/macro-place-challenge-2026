@@ -46,7 +46,9 @@ htmlcov/
 
 # Data and results
 benchmarks/raw/
-results/
+results/*
+!results/README.md
+!results/summary.schema.json
 *.pt
 *.pth
 *.ckpt

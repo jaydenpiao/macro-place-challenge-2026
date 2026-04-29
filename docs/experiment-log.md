@@ -50,3 +50,12 @@ Interpretation:
 
 - The legalizer-first baseline already beats the upstream greedy row placer on `ibm01`.
 - This single benchmark is not enough to claim leaderboard competitiveness; run all IBM benchmarks next through `scripts/run_experiment.py`.
+
+Harness verification:
+
+```bash
+uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --benchmarks ibm01 --run-id smoke-ibm01
+uv run python scripts/check_results.py results/smoke-ibm01/summary.json --max-runtime 55 --max-avg-proxy 1.4578
+```
+
+The generated `summary.json` passed legality, runtime, and RePlAce-threshold checks for the single-benchmark smoke.
