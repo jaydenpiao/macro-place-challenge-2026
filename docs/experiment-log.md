@@ -28,3 +28,25 @@ Open hypotheses:
 - Preserving and legalizing the initial placement should beat shelf packing while remaining robust.
 - Hypergraph-local search can produce cheap proxy gains before investing in GPU analytical placement.
 - Soft macro co-optimization matters for both proxy and real NG45 routability, but must be gated carefully.
+
+## 2026-04-29 - Initial JaydenPiao placer smoke
+
+Command:
+
+```bash
+uv run evaluate submissions/jaydenpiao/placer.py -b ibm01
+```
+
+Result:
+
+- proxy: `1.0560`
+- wirelength: `0.064`
+- density: `0.832`
+- congestion: `1.152`
+- overlaps: `0`
+- runtime: `2.14s`
+
+Interpretation:
+
+- The legalizer-first baseline already beats the upstream greedy row placer on `ibm01`.
+- This single benchmark is not enough to claim leaderboard competitiveness; run all IBM benchmarks next through `scripts/run_experiment.py`.

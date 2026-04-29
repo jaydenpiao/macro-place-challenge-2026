@@ -43,7 +43,17 @@ The official final entry point is:
 submissions/jaydenpiao/placer.py
 ```
 
-The initial implementation should prioritize legality, determinism, and instrumentation over leaderboard score. Score improvements should be isolated in small PRs.
+Initial real-benchmark smoke:
+
+- `uv run evaluate submissions/jaydenpiao/placer.py -b ibm01`
+- proxy `1.0560`
+- wirelength `0.064`
+- density `0.832`
+- congestion `1.152`
+- overlaps `0`
+- runtime `2.14s`
+
+The current implementation is a deterministic legalizer-first baseline with hypergraph local search. Score improvements should be isolated in small PRs.
 
 ## Next Priorities
 
