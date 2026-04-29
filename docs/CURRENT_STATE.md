@@ -57,8 +57,7 @@ The current implementation is a deterministic legalizer-first baseline with hype
 
 ## Next Priorities
 
-1. Finish agent docs and experiment harness.
-2. Add deterministic legalizer-first baseline submission.
-3. Add result schemas, promotion gates, and CI.
-4. Run all-IBM locally if feasible; otherwise run on cloud GPU/Ubuntu.
-5. Iterate on hybrid analytical placement plus local search.
+1. Run all-IBM locally if feasible; otherwise run on cloud GPU/Ubuntu.
+2. Push `infra/bootstrap-foundation` and open a draft PR for the bootstrap slice.
+3. Watch GitHub Actions CI on the PR.
+4. Iterate on hybrid analytical placement plus local search.
