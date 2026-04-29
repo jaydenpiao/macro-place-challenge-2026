@@ -127,3 +127,36 @@ def test_check_results_flags_overlap_runtime_invalid_and_proxy_failures():
     assert "benchmark ibm01 is invalid" in errors
     assert "benchmark ibm01 runtime 60.00s exceeds 55.00s" in errors
     assert "average proxy 2.0000 exceeds 1.4578" in errors
+
+
+def test_compare_results_reports_average_and_per_benchmark_deltas():
+    compare_results = _load_script("scripts/compare_results.py")
+    base = _sample_summary()
+    candidate = _sample_summary(
+        run_id="candidate",
+        benchmarks=[
+            {
+                "name": "ibm01",
+                "proxy_cost": 0.75,
+                "wirelength": 0.1,
+                "density": 0.2,
+                "congestion": 0.3,
+                "overlaps": 0,
+                "runtime": 1.5,
+                "valid": True,
+            }
+        ],
+        aggregate={
+            "average_proxy": 0.75,
+            "total_overlaps": 0,
+            "total_runtime": 1.5,
+            "max_runtime": 1.5,
+        },
+    )
+
+    comparison = compare_results.compare_summaries(base, candidate)
+
+    assert comparison["average_delta"] == -0.25
+    assert comparison["improved_count"] == 1
+    assert comparison["regressed_count"] == 0
+    assert comparison["benchmarks"][0]["delta"] == -0.25

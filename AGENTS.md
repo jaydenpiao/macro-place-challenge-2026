@@ -46,6 +46,7 @@ uv run --extra dev pytest
 uv run evaluate submissions/jaydenpiao/placer.py -b ibm01
 uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --benchmarks ibm01 --run-id smoke-ibm01
 uv run python scripts/check_results.py results/smoke-ibm01/summary.json
+uv run python scripts/compare_results.py results/baseline/summary.json results/candidate/summary.json
 ```
 
 Use a Linux GPU machine for serious all-benchmark and Docker parity runs.
