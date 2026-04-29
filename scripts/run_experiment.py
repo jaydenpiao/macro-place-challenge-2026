@@ -73,7 +73,12 @@ def build_summary(
         "environment": _environment_metadata(),
         "env_knobs": {
             key: os.environ.get(key, "")
-            for key in ["JAYDEN_PLACER_SEED", "JAYDEN_SEARCH_ITERS", "JAYDEN_LEGAL_GAP"]
+            for key in [
+                "JAYDEN_PLACER_SEED",
+                "JAYDEN_SEARCH_ITERS",
+                "JAYDEN_LEGAL_GAP",
+                "JAYDEN_TRANSFORM",
+            ]
         },
         "benchmarks": clean_results,
         "aggregate": {

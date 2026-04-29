@@ -31,6 +31,13 @@ def _env_float(name: str, default: float) -> float:
     return float(raw)
 
 
+def _env_str(name: str, default: str) -> str:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    return raw
+
+
 class JaydenPiaoPlacer:
     """Deterministic legalizer-first hybrid placer."""
 
@@ -39,6 +46,7 @@ class JaydenPiaoPlacer:
         seed: int | None = None,
         search_iters: int | None = None,
         legal_gap: float | None = None,
+        transform: str | None = None,
     ) -> None:
         self.config = PlacerConfig(
             seed=seed if seed is not None else _env_int("JAYDEN_PLACER_SEED", 20260429),
@@ -46,6 +54,7 @@ class JaydenPiaoPlacer:
                 search_iters if search_iters is not None else _env_int("JAYDEN_SEARCH_ITERS", 0)
             ),
             legal_gap=legal_gap if legal_gap is not None else _env_float("JAYDEN_LEGAL_GAP", 0.01),
+            transform=transform if transform is not None else _env_str("JAYDEN_TRANSFORM", "auto"),
         )
 
     def place(self, benchmark: Benchmark) -> torch.Tensor:

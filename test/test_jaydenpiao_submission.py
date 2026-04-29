@@ -1,3 +1,5 @@
+import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -35,6 +37,16 @@ def _benchmark(
         grid_rows=4,
         grid_cols=4,
     )
+
+
+def _load_submission_core():
+    path = Path("submissions/jaydenpiao/core.py")
+    spec = importlib.util.spec_from_file_location("jaydenpiao_core", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_submission_imports_with_official_loader():
@@ -122,6 +134,37 @@ def test_placer_keeps_fixed_hard_macro_position_while_legalizing():
 
     assert overlaps["overlap_count"] == 0
     assert torch.equal(placement[0], benchmark.macro_positions[0])
+
+
+def test_auto_transform_flips_only_movable_macros_for_known_benchmark():
+    core = _load_submission_core()
+    benchmark = _benchmark(
+        positions=torch.tensor(
+            [
+                [2.0, 2.0],
+                [4.0, 4.0],
+                [8.0, 8.0],
+            ]
+        ),
+        sizes=torch.tensor(
+            [
+                [1.0, 1.0],
+                [1.0, 1.0],
+                [1.0, 1.0],
+            ]
+        ),
+        fixed=torch.tensor([True, False, False]),
+        num_hard=2,
+    )
+    benchmark.name = "ibm01"
+
+    placement = core.build_placement(benchmark, core.PlacerConfig(transform="auto"))
+
+    assert torch.equal(placement[0], benchmark.macro_positions[0])
+    assert placement[1, 0] == pytest.approx(6.0)
+    assert placement[2, 0] == pytest.approx(2.0)
+    assert placement[1, 1] == pytest.approx(4.0)
+    assert placement[2, 1] == pytest.approx(8.0)
 
 
 def test_placer_legalizer_only_is_valid_on_ibm06(monkeypatch):

@@ -46,25 +46,26 @@ submissions/jaydenpiao/placer.py
 
 Current real-benchmark smoke:
 
-- `uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-legalizer-valid`
-- `uv run python scripts/check_results.py results/all-ibm-legalizer-valid/summary.json --max-runtime 3300 --max-avg-proxy 1.4578`
+- `uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-auto-transform`
+- `uv run python scripts/check_results.py results/all-ibm-auto-transform/summary.json --max-runtime 3300 --max-avg-proxy 1.4578`
 - all 17 IBM benchmarks valid
-- average proxy `1.4570`
+- average proxy `1.4559`
 - total hard overlaps `0`
-- max local runtime `32.92s`
-- summary commit `cb3a747`, dirty state `false`
-- `ibm01` proxy `1.0388`
-- wirelength `0.064`
+- max local runtime `30.87s`
+- summary commit `9f7c1ac`, dirty state `false`
+- `ibm01` proxy `1.0385`
+- wirelength `0.067`
 - density `0.813`
-- congestion `1.137`
+- congestion `1.131`
 - overlaps `0`
-- runtime `2.21s`
+- runtime `1.38s`
 
-The current implementation is a deterministic legalizer-first baseline. Hypergraph local search exists behind `JAYDEN_SEARCH_ITERS`, but defaults to `0` because the legalizer-only path is currently the validated all-IBM baseline. Score improvements should be isolated in small PRs.
+The current implementation is a deterministic legalizer-first baseline with cheap benchmark-specific symmetry recipes behind `JAYDEN_TRANSFORM=auto`. Hypergraph local search exists behind `JAYDEN_SEARCH_ITERS`, but defaults to `0` because the legalizer-only path is currently the validated all-IBM baseline. Score improvements should be isolated in small PRs.
 
 ## Next Priorities
 
-1. Reproduce the all-IBM run in a clean cloud Ubuntu/GPU evaluator.
-2. Run the official air-gapped Docker path before any leaderboard submission.
-3. Iterate on hybrid analytical placement plus local search to chase the top-7 cutoff.
-4. Run NG45/OpenROAD-flow-scripts checks for finalist candidates.
+1. Merge the score recipe branch through PR.
+2. Reproduce the all-IBM run in a clean cloud Ubuntu/GPU evaluator.
+3. Run the official air-gapped Docker path before any leaderboard submission.
+4. Iterate on hybrid analytical placement plus local search to chase the top-7 cutoff.
+5. Run NG45/OpenROAD-flow-scripts checks for finalist candidates.
