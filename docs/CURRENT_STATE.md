@@ -87,6 +87,6 @@ The current implementation is a deterministic legalizer-first baseline with chea
 ## Next Priorities
 
 1. Run the official air-gapped Docker path before any leaderboard submission.
-2. Use a GPU VM or a custom verified RunPod Docker template for `scripts/run_cloud_parity.sh`.
+2. Use a GPU VM or a custom verified RunPod Docker template for `scripts/run_cloud_parity.sh`; the wrapper now preflights Docker, host NVIDIA, and Docker GPU visibility before evaluating.
 3. Iterate on hybrid analytical placement plus local search to chase the top-7 cutoff.
 4. Run NG45/OpenROAD-flow-scripts checks for finalist candidates.

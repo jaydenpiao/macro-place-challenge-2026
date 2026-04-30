@@ -24,21 +24,14 @@ DOCKER_LOG="$REPO_ROOT/eval_docker/results/${TEAM}.log"
 
 cd "$REPO_ROOT"
 
-if ! command -v docker >/dev/null 2>&1; then
-    echo "error: docker is required for cloud parity evaluation" >&2
-    exit 2
-fi
-
-if ! command -v nvidia-smi >/dev/null 2>&1; then
-    echo "error: nvidia-smi is required; use an NVIDIA GPU host" >&2
-    exit 2
-fi
-
-git submodule update --init external/MacroPlacement
-
 set -a
 source "$CONFIG_PATH"
 set +a
+
+python3 "$REPO_ROOT/scripts/check_cloud_parity_host.py" \
+    --gpu-smoke-image "${JAYDEN_DOCKER_GPU_SMOKE_IMAGE:-nvidia/cuda:12.4.1-base-ubuntu22.04}"
+
+git submodule update --init external/MacroPlacement
 
 mkdir -p "$RESULT_DIR"
 
@@ -67,7 +60,8 @@ cat >"$RESULT_DIR/metadata.json" <<EOF
     "JAYDEN_PLACER_SEED": "${JAYDEN_PLACER_SEED:-}",
     "JAYDEN_SEARCH_ITERS": "${JAYDEN_SEARCH_ITERS:-}",
     "JAYDEN_LEGAL_GAP": "${JAYDEN_LEGAL_GAP:-}",
-    "JAYDEN_TRANSFORM": "${JAYDEN_TRANSFORM:-}"
+    "JAYDEN_TRANSFORM": "${JAYDEN_TRANSFORM:-}",
+    "JAYDEN_DOCKER_GPU_SMOKE_IMAGE": "${JAYDEN_DOCKER_GPU_SMOKE_IMAGE:-}"
   },
   "hardware": {
     "hostname": "$(hostname)",
