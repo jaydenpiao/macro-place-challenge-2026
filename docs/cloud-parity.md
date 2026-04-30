@@ -40,3 +40,18 @@ Before a leaderboard submission, record:
 - total hard overlaps
 
 Do not submit from a local macOS-only result.
+
+## RunPod Notes
+
+RunPod can be used for a direct Linux/GPU check, but the tested public templates were not enough for official Docker parity:
+
+- `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` on RTX 6000 Ada worked over SSH and ran `scripts/run_experiment.py`, but did not include Docker.
+- `runpod-desktop` / `runpod/kasm-docker:cuda11` looked like the best nested-Docker candidate, but in the 2026-04-30 attempt it exposed pod metadata while TCP/22 refused connections and `uptimeSeconds` stayed `0`.
+
+Do not call a RunPod PyTorch result "cloud parity." Treat it as Linux/GPU direct validation only. For strict parity, use a real GPU VM with Docker/NVIDIA runtime or create a custom RunPod template whose startup command verifies:
+
+```bash
+sshd -T >/dev/null
+docker version
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+```

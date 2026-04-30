@@ -151,3 +151,43 @@ Interpretation:
 
 - Do not use `PlacementCost.optimize_stdcells` in the default runtime path.
 - Revisit only as a cloud-only experiment with strict timeout accounting and a saved result summary.
+
+## 2026-04-30 - RunPod Linux/GPU direct validation
+
+Purpose: validate the current default submission on a Linux NVIDIA GPU host and test whether RunPod can provide official Docker parity.
+
+RunPod setup:
+
+- API key loaded from local secret file; key was not printed in logs.
+- First tried `runpod-desktop` / `runpod/kasm-docker:cuda11` on RTX 6000 Ada for nested Docker parity.
+- The Docker-oriented template exposed pod metadata but kept `uptimeSeconds: 0` and refused TCP/22, so it was terminated.
+- Fallback used `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` on RTX 6000 Ada.
+- The PyTorch template was reachable over SSH and had NVIDIA GPU access, but no Docker daemon.
+
+Direct Linux/GPU command:
+
+```bash
+git clone https://github.com/jaydenpiao/macro-place-challenge-2026.git
+cd macro-place-challenge-2026
+git checkout 397b06edbc071e47efb99dc58ff9c8afec0697d9
+git submodule update --init external/MacroPlacement
+python3 -m pip install --upgrade pip uv
+uv sync --extra dev
+set -a && source configs/cloud_gpu.env && set +a
+uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --run-id runpod-linuxgpu-20260430-003938 --all
+```
+
+Aggregate result:
+
+- average proxy: `1.4559245530`
+- total hard overlaps: `0`
+- max runtime: `54.81s`
+- total runtime: `158.65s`
+- benchmark validity: all 17 IBM benchmarks valid
+- summary commit: `397b06edbc071e47efb99dc58ff9c8afec0697d9`, dirty state `false`
+
+Interpretation:
+
+- The macOS all-IBM score reproduced on Linux/GPU within expected noise; no legality regression.
+- This is still not official air-gapped Docker parity.
+- For strict parity, prefer a GPU VM with Docker and NVIDIA runtime, or build a custom RunPod template with verified `sshd` and Docker before starting the evaluator.
