@@ -78,6 +78,7 @@ def build_summary(
                 "JAYDEN_SEARCH_ITERS",
                 "JAYDEN_LEGAL_GAP",
                 "JAYDEN_TRANSFORM",
+                "JAYDEN_STRATEGY",
             ]
         },
         "benchmarks": clean_results,

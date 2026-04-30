@@ -213,3 +213,37 @@ Interpretation:
 - Use this for knob sweeps and candidate screening before opening scoring PRs.
 - Smoke scans with `--benchmarks` are useful for command validation, but their aggregate deltas are not promotion signals unless `comparison_complete` is `true`.
 - Only promote a scanner result after a normal all-IBM run beats or matches the baseline gate with zero overlaps.
+
+## 2026-04-30 - Auto profile schedule
+
+Purpose: promote the best legal per-benchmark knob choices from `scan-existing-knobs-20260430` without hardcoding final coordinates.
+
+Promoted profile:
+
+- `ibm01`: `JAYDEN_LEGAL_GAP=0.005`
+- `ibm02`: `JAYDEN_SEARCH_ITERS=100`
+- `ibm03`, `ibm09`, `ibm11`, `ibm12`, `ibm13`, `ibm16`, `ibm18`: `JAYDEN_LEGAL_GAP=0.02`
+- `ibm04`, `ibm06`, `ibm07`, `ibm14`: `JAYDEN_LEGAL_GAP=0.001`
+- `ibm08`, `ibm10`: `JAYDEN_LEGAL_GAP=0.005`
+- all other benchmarks: baseline defaults
+
+Command:
+
+```bash
+uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-auto-profile-schedule
+uv run python scripts/check_results.py results/all-ibm-auto-profile-schedule/summary.json --max-runtime 3300 --max-avg-proxy 1.4559245531
+uv run python scripts/compare_results.py results/all-ibm-auto-transform/summary.json results/all-ibm-auto-profile-schedule/summary.json --json results/all-ibm-auto-profile-schedule/comparison.json
+```
+
+Aggregate result:
+
+- average proxy: `1.4555341426`
+- total hard overlaps: `0`
+- max local runtime: `30.39s`
+- benchmark validity: all 17 IBM benchmarks valid
+- comparison vs `all-ibm-auto-transform`: delta `-0.0003904104`, 15 benchmarks improved, 0 regressed
+
+Interpretation:
+
+- This is a small but clean improvement and should become the default if CI and review pass.
+- It is not enough to approach top-7; the next scoring lane needs real placement moves, not just global knob schedules.

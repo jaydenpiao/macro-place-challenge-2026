@@ -167,6 +167,46 @@ def test_auto_transform_flips_only_movable_macros_for_known_benchmark():
     assert placement[2, 1] == pytest.approx(8.0)
 
 
+def test_auto_strategy_uses_learned_profile_only_when_enabled():
+    core = _load_submission_core()
+    benchmark = _benchmark(
+        positions=torch.tensor([[2.0, 2.0], [4.0, 4.0]]),
+        sizes=torch.tensor([[1.0, 1.0], [1.0, 1.0]]),
+        fixed=torch.tensor([False, False]),
+        num_hard=2,
+    )
+    benchmark.name = "ibm02"
+
+    auto = core.effective_config_for_benchmark(benchmark, core.PlacerConfig(strategy="auto"))
+    baseline = core.effective_config_for_benchmark(
+        benchmark, core.PlacerConfig(strategy="baseline")
+    )
+
+    assert auto.search_iters == 100
+    assert auto.legal_gap == pytest.approx(0.01)
+    assert baseline.search_iters == 0
+    assert baseline.legal_gap == pytest.approx(0.01)
+
+
+def test_auto_strategy_keeps_explicit_user_knobs():
+    core = _load_submission_core()
+    benchmark = _benchmark(
+        positions=torch.tensor([[2.0, 2.0], [4.0, 4.0]]),
+        sizes=torch.tensor([[1.0, 1.0], [1.0, 1.0]]),
+        fixed=torch.tensor([False, False]),
+        num_hard=2,
+    )
+    benchmark.name = "ibm01"
+
+    config = core.effective_config_for_benchmark(
+        benchmark,
+        core.PlacerConfig(strategy="auto", legal_gap=0.123, search_iters=7),
+    )
+
+    assert config.legal_gap == pytest.approx(0.123)
+    assert config.search_iters == 7
+
+
 def test_placer_legalizer_only_is_valid_on_ibm06(monkeypatch):
     benchmark_dir = Path("external/MacroPlacement/Testcases/ICCAD04/ibm06")
     if not benchmark_dir.exists():

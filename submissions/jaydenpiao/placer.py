@@ -47,6 +47,7 @@ class JaydenPiaoPlacer:
         search_iters: int | None = None,
         legal_gap: float | None = None,
         transform: str | None = None,
+        strategy: str | None = None,
     ) -> None:
         self.config = PlacerConfig(
             seed=seed if seed is not None else _env_int("JAYDEN_PLACER_SEED", 20260429),
@@ -55,6 +56,7 @@ class JaydenPiaoPlacer:
             ),
             legal_gap=legal_gap if legal_gap is not None else _env_float("JAYDEN_LEGAL_GAP", 0.01),
             transform=transform if transform is not None else _env_str("JAYDEN_TRANSFORM", "auto"),
+            strategy=strategy if strategy is not None else _env_str("JAYDEN_STRATEGY", "auto"),
         )
 
     def place(self, benchmark: Benchmark) -> torch.Tensor:
