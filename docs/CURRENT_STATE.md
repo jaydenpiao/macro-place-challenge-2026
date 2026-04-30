@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-04-29
+Last updated: 2026-04-30
 
 ## Repository
 
@@ -10,6 +10,8 @@ Last updated: 2026-04-29
 - Local primary clone: `/Users/jaydenpiao/Desktop/hrt_challenge/macro-place-challenge-2026`
 - Bootstrap PR: `https://github.com/jaydenpiao/macro-place-challenge-2026/pull/1` merged into `main`
 - Score recipe PR: `https://github.com/jaydenpiao/macro-place-challenge-2026/pull/2` merged into `main`
+- Cloud parity wrapper PR: `https://github.com/jaydenpiao/macro-place-challenge-2026/pull/3` merged into `main`
+- Result comparison helper PR: `https://github.com/jaydenpiao/macro-place-challenge-2026/pull/4` merged into `main`
 
 ## Verified Baseline
 
@@ -36,6 +38,25 @@ Note: plain `uv run pytest` did not install the optional `dev` extra and used th
 - This machine has no Docker CLI.
 - This machine has no NVIDIA GPU.
 - Serious scoring, air-gapped Docker parity, multiprocessing stress, and optional ORFS checks must run on cloud Ubuntu/GPU.
+
+## Cloud GPU Check
+
+RunPod direct Linux/GPU validation completed on 2026-04-30 using:
+
+- RunPod secure cloud `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
+- NVIDIA RTX 6000 Ada Generation, 49140 MiB, driver `570.124.06`
+- repo commit `397b06edbc071e47efb99dc58ff9c8afec0697d9`
+- result artifact: `results/runpod-linuxgpu-20260430-003938/summary.json` (ignored by git)
+
+Result:
+
+- all 17 IBM benchmarks valid
+- average proxy `1.4559245530`
+- total hard overlaps `0`
+- max runtime `54.81s`
+- total runtime `158.65s`
+
+Important: this was not official Docker parity. The RunPod PyTorch image did not include Docker. The RunPod `runpod-desktop` / `runpod/kasm-docker:cuda11` attempt exposed pod metadata but never produced a usable SSH daemon on TCP 22 before termination. Use a true GPU VM, or a custom RunPod template with verified `sshd` plus Docker/NVIDIA runtime, for `scripts/run_cloud_parity.sh`.
 
 ## Current Submission
 
@@ -65,7 +86,7 @@ The current implementation is a deterministic legalizer-first baseline with chea
 
 ## Next Priorities
 
-1. Reproduce the all-IBM run in a clean cloud Ubuntu/GPU evaluator with `scripts/run_cloud_parity.sh`.
-2. Run the official air-gapped Docker path before any leaderboard submission.
+1. Run the official air-gapped Docker path before any leaderboard submission.
+2. Use a GPU VM or a custom verified RunPod Docker template for `scripts/run_cloud_parity.sh`.
 3. Iterate on hybrid analytical placement plus local search to chase the top-7 cutoff.
 4. Run NG45/OpenROAD-flow-scripts checks for finalist candidates.
