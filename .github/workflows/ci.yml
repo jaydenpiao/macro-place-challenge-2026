@@ -34,7 +34,7 @@ jobs:
         run: uv sync --extra dev
 
       - name: Check formatting
-        run: uv run --extra dev black --check submissions/jaydenpiao scripts/run_experiment.py scripts/check_results.py scripts/compare_results.py test/test_jaydenpiao_submission.py test/test_experiment_harness.py
+        run: uv run --extra dev black --check submissions/jaydenpiao scripts/run_experiment.py scripts/check_results.py scripts/compare_results.py scripts/check_cloud_parity_host.py test/test_jaydenpiao_submission.py test/test_experiment_harness.py test/test_cloud_parity_preflight.py
 
       - name: Run tests
         run: uv run --extra dev pytest

@@ -22,10 +22,19 @@ scripts/run_cloud_parity.sh cloud-auto-transform-001 jaydenpiao submissions/jayd
 The wrapper:
 
 - sources `configs/cloud_gpu.env`
+- runs `scripts/check_cloud_parity_host.py`
+- refuses to continue unless `docker version`, `nvidia-smi`, and `docker run --rm --gpus all ... nvidia-smi` pass
 - forwards `JAYDEN_*` knobs into `eval_docker/run_eval.sh`
 - runs Docker with `--network none`, `--gpus all`, `--memory 64g`, and `--cpus 16`
 - copies the Docker log to `results/<run-id>/run.log`
 - writes reproducibility metadata to `results/<run-id>/metadata.json`
+
+Override the preflight CUDA image only when the default cannot be pulled on the host:
+
+```bash
+JAYDEN_DOCKER_GPU_SMOKE_IMAGE=nvidia/cuda:12.4.1-base-ubuntu22.04 \
+  scripts/run_cloud_parity.sh cloud-auto-transform-001 jaydenpiao submissions/jaydenpiao/placer.py
+```
 
 ## Promotion Requirement
 
