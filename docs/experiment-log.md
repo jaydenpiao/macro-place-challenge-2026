@@ -191,3 +191,25 @@ Interpretation:
 - The macOS all-IBM score reproduced on Linux/GPU within expected noise; no legality regression.
 - This is still not official air-gapped Docker parity.
 - For strict parity, prefer a GPU VM with Docker and NVIDIA runtime, or build a custom RunPod template with verified `sshd` and Docker before starting the evaluator.
+
+## 2026-04-30 - Candidate scanner harness
+
+Purpose: make score experiments reproducible without changing the default placer behavior.
+
+Usage:
+
+```bash
+uv run python scripts/scan_candidates.py \
+  --run-id scan-gap-smoke \
+  --baseline results/all-ibm-auto-transform/summary.json \
+  --benchmarks ibm01 \
+  --variant gap005:JAYDEN_LEGAL_GAP=0.005
+```
+
+For full promotion scans, omit `--benchmarks` so the scanner runs all IBM benchmarks. Each variant writes `results/<run-id>__<variant>/summary.json`; the aggregate comparison is written to `results/<run-id>/scan_summary.json`.
+
+Interpretation:
+
+- Use this for knob sweeps and candidate screening before opening scoring PRs.
+- Smoke scans with `--benchmarks` are useful for command validation, but their aggregate deltas are not promotion signals unless `comparison_complete` is `true`.
+- Only promote a scanner result after a normal all-IBM run beats or matches the baseline gate with zero overlaps.

@@ -84,6 +84,8 @@ Current real-benchmark smoke:
 
 The current implementation is a deterministic legalizer-first baseline with cheap benchmark-specific symmetry recipes behind `JAYDEN_TRANSFORM=auto`. Hypergraph local search exists behind `JAYDEN_SEARCH_ITERS`, but defaults to `0` because the legalizer-only path is currently the validated all-IBM baseline. Score improvements should be isolated in small PRs.
 
+Candidate variant scans should use `scripts/scan_candidates.py` so every run produces per-variant `summary.json` files plus one aggregate `scan_summary.json` with deltas against the current baseline.
+
 ## Next Priorities
 
 1. Run the official air-gapped Docker path before any leaderboard submission.
