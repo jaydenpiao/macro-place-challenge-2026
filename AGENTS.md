@@ -11,11 +11,11 @@ Optimize a legal macro placer for the official challenge evaluator without modif
 3. Top-7 average proxy score on the 17 IBM benchmarks.
 4. Credible NG45/OpenROAD behavior for WNS, TNS, and area.
 
-As of 2026-04-29, the public proxy targets are:
+As of 2026-04-30, the public proxy targets are:
 
 - RePlAce baseline average: `1.4578`
 - Top-7 public cutoff: `1.3479`
-- Current public lead: `1.1172`
+- Current verified public lead: `1.2224`
 
 ## Non-Negotiable Rules
 

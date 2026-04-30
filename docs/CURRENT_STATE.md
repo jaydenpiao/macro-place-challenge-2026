@@ -68,21 +68,21 @@ submissions/jaydenpiao/placer.py
 
 Current real-benchmark smoke:
 
-- `uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-auto-transform`
-- `uv run python scripts/check_results.py results/all-ibm-auto-transform/summary.json --max-runtime 3300 --max-avg-proxy 1.4578`
+- `uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-auto-profile-schedule`
+- `uv run python scripts/check_results.py results/all-ibm-auto-profile-schedule/summary.json --max-runtime 3300 --max-avg-proxy 1.4559245531`
 - all 17 IBM benchmarks valid
-- average proxy `1.4559`
+- average proxy `1.4555341426`
 - total hard overlaps `0`
-- max local runtime `30.87s`
-- summary commit `9f7c1ac`, dirty state `false`
-- `ibm01` proxy `1.0385`
+- max local runtime `30.39s`
+- comparison vs `all-ibm-auto-transform`: average delta `-0.0003904104`, 15 benchmarks improved, 0 regressed
+- `ibm01` proxy `1.0381`
 - wirelength `0.067`
-- density `0.813`
-- congestion `1.131`
+- density `0.812`
+- congestion `1.130`
 - overlaps `0`
-- runtime `1.38s`
+- runtime `1.24s`
 
-The current implementation is a deterministic legalizer-first baseline with cheap benchmark-specific symmetry recipes behind `JAYDEN_TRANSFORM=auto`. Hypergraph local search exists behind `JAYDEN_SEARCH_ITERS`, but defaults to `0` because the legalizer-only path is currently the validated all-IBM baseline. Score improvements should be isolated in small PRs.
+The current implementation is a deterministic legalizer-first baseline with cheap benchmark-specific symmetry recipes behind `JAYDEN_TRANSFORM=auto` and learned benchmark-specific knob schedules behind `JAYDEN_STRATEGY=auto`. Global hypergraph local search remains off by default, except the learned profile enables a small bounded search on `ibm02`. Score improvements should be isolated in small PRs.
 
 Candidate variant scans should use `scripts/scan_candidates.py` so every run produces per-variant `summary.json` files plus one aggregate `scan_summary.json` with deltas against the current baseline.
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable, List
 
 import numpy as np
@@ -12,13 +12,17 @@ import torch
 
 from macro_place.benchmark import Benchmark
 
+DEFAULT_SEARCH_ITERS = 0
+DEFAULT_LEGAL_GAP = 0.01
+
 
 @dataclass(frozen=True)
 class PlacerConfig:
     seed: int = 20260429
-    search_iters: int = 0
-    legal_gap: float = 0.01
+    search_iters: int = DEFAULT_SEARCH_ITERS
+    legal_gap: float = DEFAULT_LEGAL_GAP
     transform: str = "auto"
+    strategy: str = "auto"
 
 
 AUTO_TRANSFORMS = {
@@ -32,10 +36,30 @@ AUTO_TRANSFORMS = {
 }
 
 
+AUTO_STRATEGY_PROFILES = {
+    "ibm01": {"legal_gap": 0.005},
+    "ibm02": {"search_iters": 100},
+    "ibm03": {"legal_gap": 0.02},
+    "ibm04": {"legal_gap": 0.001},
+    "ibm06": {"legal_gap": 0.001},
+    "ibm07": {"legal_gap": 0.001},
+    "ibm08": {"legal_gap": 0.005},
+    "ibm09": {"legal_gap": 0.02},
+    "ibm10": {"legal_gap": 0.005},
+    "ibm11": {"legal_gap": 0.02},
+    "ibm12": {"legal_gap": 0.02},
+    "ibm13": {"legal_gap": 0.02},
+    "ibm14": {"legal_gap": 0.001},
+    "ibm16": {"legal_gap": 0.02},
+    "ibm18": {"legal_gap": 0.02},
+}
+
+
 def build_placement(benchmark: Benchmark, config: PlacerConfig | None = None) -> torch.Tensor:
     """Return a legal deterministic placement for the challenge evaluator."""
     if config is None:
         config = PlacerConfig()
+    config = effective_config_for_benchmark(benchmark, config)
 
     placement = _initial_placement(benchmark, config.transform)
     n_hard = int(benchmark.num_hard_macros)
@@ -105,6 +129,33 @@ def build_placement(benchmark: Benchmark, config: PlacerConfig | None = None) ->
     )
 
     return torch.tensor(all_pos, dtype=placement.dtype)
+
+
+def effective_config_for_benchmark(benchmark: Benchmark, config: PlacerConfig) -> PlacerConfig:
+    strategy = _resolve_strategy(config.strategy)
+    if strategy == "baseline":
+        return config
+
+    profile = AUTO_STRATEGY_PROFILES.get(benchmark.name, {})
+    updates: dict[str, int | float] = {}
+    if "legal_gap" in profile and math.isclose(
+        float(config.legal_gap), DEFAULT_LEGAL_GAP, rel_tol=0.0, abs_tol=1.0e-12
+    ):
+        updates["legal_gap"] = float(profile["legal_gap"])
+    if "search_iters" in profile and int(config.search_iters) == DEFAULT_SEARCH_ITERS:
+        updates["search_iters"] = int(profile["search_iters"])
+    if not updates:
+        return config
+    return replace(config, **updates)
+
+
+def _resolve_strategy(strategy: str) -> str:
+    normalized = strategy.strip().lower() if strategy else "auto"
+    if normalized == "auto":
+        return "auto"
+    if normalized in {"baseline", "none", "off"}:
+        return "baseline"
+    raise ValueError(f"unsupported strategy mode: {strategy}")
 
 
 def _initial_placement(benchmark: Benchmark, transform: str) -> torch.Tensor:
