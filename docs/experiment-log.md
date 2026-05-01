@@ -346,3 +346,51 @@ Interpretation:
 
 - This is a small but clean score improvement and should be validated on RunPod Linux/GPU after merge.
 - Generic hard-macro search remains unsafe for the weak benchmarks; density-aware search should remain benchmark-scheduled until a stronger exact-screened candidate selector exists.
+
+## 2026-05-01 - Density profile RunPod direct validation
+
+Purpose: validate the merged density-aware `auto` default on a Linux NVIDIA GPU host and record strict parity preflight status.
+
+RunPod setup:
+
+- pod id: `ipgg3pdzfmcvyn`
+- template: `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
+- GPU: NVIDIA RTX 6000 Ada Generation, 49140 MiB, driver `570.211.01`
+- vCPU allocation reported by RunPod: 24
+- repo commit: `fcfe2640d40b655b902921636f88d4f622d9e2aa`
+- run id: `runpod-density-profile-20260501-043910`
+- result artifact: `results/runpod-density-profile-20260501-043910/summary.json` (ignored by git)
+- pod deleted after artifact collection; `runpodctl pod list` returned `[]`
+
+Direct Linux/GPU command:
+
+```bash
+git clone https://github.com/jaydenpiao/macro-place-challenge-2026.git
+cd macro-place-challenge-2026
+git checkout fcfe2640d40b655b902921636f88d4f622d9e2aa
+git submodule update --init external/MacroPlacement
+uv sync --extra dev
+set -a && source configs/cloud_gpu.env && set +a
+uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id runpod-density-profile-20260501-043910
+uv run python scripts/check_results.py results/runpod-density-profile-20260501-043910/summary.json --max-runtime 3300 --max-avg-proxy 1.4555341427
+```
+
+Aggregate result:
+
+- average proxy: `1.4553974306`
+- total hard overlaps: `0`
+- max runtime: `77.31s`
+- total runtime: `246.37s`
+- benchmark validity: all 17 IBM benchmarks valid
+
+Strict parity preflight:
+
+```text
+cloud parity preflight failed: docker client/server failed with exit 127: [Errno 2] No such file or directory: 'docker'
+```
+
+Interpretation:
+
+- The density-aware `auto` default reproduced on Linux/GPU with the same average proxy as the local all-IBM run and no legality regression.
+- This is still not official air-gapped Docker parity because the RunPod PyTorch image has no Docker daemon.
+- Next scoring work should target a larger algorithmic move; this PR only harvests a small safe local-search schedule.
