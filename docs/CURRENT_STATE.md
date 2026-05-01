@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-04-30
+Last updated: 2026-05-01
 
 ## Repository
 
@@ -41,7 +41,28 @@ Note: plain `uv run pytest` did not install the optional `dev` extra and used th
 
 ## Cloud GPU Check
 
-RunPod direct Linux/GPU validation completed on 2026-04-30 using:
+RunPod direct Linux/GPU validation completed on 2026-05-01 using the current `auto` default:
+
+- RunPod secure cloud `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
+- NVIDIA RTX 6000 Ada Generation, 49140 MiB, driver `570.195.03`
+- repo commit `53390e1fff20017258b9967dda136fbc94f258f4`
+- result artifact: `results/runpod-auto-profile-20260501-023124/summary.json` (ignored by git)
+
+Result:
+
+- all 17 IBM benchmarks valid
+- average proxy `1.4555341426`
+- total hard overlaps `0`
+- max runtime `53.67s`
+- total runtime `168.31s`
+
+Strict Docker parity was not run on this host because `scripts/check_cloud_parity_host.py` correctly refused the RunPod PyTorch image:
+
+```text
+cloud parity preflight failed: docker client/server failed with exit 127: [Errno 2] No such file or directory: 'docker'
+```
+
+Prior RunPod direct Linux/GPU validation completed on 2026-04-30 using:
 
 - RunPod secure cloud `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
 - NVIDIA RTX 6000 Ada Generation, 49140 MiB, driver `570.124.06`
@@ -56,7 +77,7 @@ Result:
 - max runtime `54.81s`
 - total runtime `158.65s`
 
-Important: this was not official Docker parity. The RunPod PyTorch image did not include Docker. The RunPod `runpod-desktop` / `runpod/kasm-docker:cuda11` attempt exposed pod metadata but never produced a usable SSH daemon on TCP 22 before termination. Use a true GPU VM, or a custom RunPod template with verified `sshd` plus Docker/NVIDIA runtime, for `scripts/run_cloud_parity.sh`.
+Important: neither RunPod PyTorch run was official Docker parity. The RunPod PyTorch image did not include Docker. The RunPod `runpod-desktop` / `runpod/kasm-docker:cuda11` attempt exposed pod metadata but never produced a usable SSH daemon on TCP 22 before termination. Use a true GPU VM, or a custom RunPod template with verified `sshd` plus Docker/NVIDIA runtime, for `scripts/run_cloud_parity.sh`.
 
 ## Current Submission
 
@@ -83,6 +104,8 @@ Current real-benchmark smoke:
 - runtime `1.24s`
 
 The current implementation is a deterministic legalizer-first baseline with cheap benchmark-specific symmetry recipes behind `JAYDEN_TRANSFORM=auto` and learned benchmark-specific knob schedules behind `JAYDEN_STRATEGY=auto`. Global hypergraph local search remains off by default, except the learned profile enables a small bounded search on `ibm02`. Score improvements should be isolated in small PRs.
+
+The same `auto` default has now reproduced on RunPod Linux/GPU at `1.4555341426` with zero overlaps. This is direct Linux/GPU validation only, not official Docker parity.
 
 Candidate variant scans should use `scripts/scan_candidates.py` so every run produces per-variant `summary.json` files plus one aggregate `scan_summary.json` with deltas against the current baseline.
 
