@@ -48,8 +48,9 @@ The first durable lane is a legalizer-first hybrid:
 2. Clamp movable macros inside canvas bounds.
 3. Repair hard-macro overlaps with a positive gap.
 4. Optionally apply learned benchmark-specific knob schedules through `JAYDEN_STRATEGY=auto`.
-5. Optionally use fast hypergraph surrogate search to improve wirelength without breaking legality.
-6. Keep soft macros stable unless a tested optimizer improves proxy and routability.
-7. Evaluate with the official proxy only at candidate boundaries.
+5. Optionally use fast pin-aware hypergraph surrogate search to improve wirelength without breaking legality.
+6. Optionally add a bounded grid-density surrogate for benchmarks where scans prove net proxy gain.
+7. Keep soft macros stable unless a tested optimizer improves proxy and routability.
+8. Evaluate with the official proxy only at candidate boundaries.
 
 Future lanes should be added behind explicit config knobs and promoted only with saved result summaries.

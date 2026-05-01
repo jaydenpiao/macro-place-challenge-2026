@@ -295,3 +295,54 @@ Interpretation:
 - The current `auto` default reproduced on Linux/GPU with the same score as local all-IBM validation and no legality regression.
 - This is still not official air-gapped Docker parity because the RunPod PyTorch image has no Docker daemon.
 - Do not spend more time on global knob sweeps; the next scoring lane should implement real macro moves, soft-density cleanup, or exact-proxy-screened local refinement for `ibm18`, `ibm17`, `ibm06`, `ibm12`, `ibm15`, and `ibm14`.
+
+## 2026-05-01 - Density-aware local refinement profile
+
+Purpose: test a narrow local-refinement improvement that reduces density hotspots without applying stochastic hard-macro search globally.
+
+Implementation:
+
+- `_net_hpwl` now uses pin-level hard-macro offsets from `Benchmark.net_pin_nodes` when available.
+- `_density_surrogate_cost` approximates grid hotspot pressure from hard and soft macro area occupancy.
+- `JAYDEN_DENSITY_WEIGHT` controls the density term in local search and defaults to `0`.
+- `JAYDEN_STRATEGY=auto` enables `search_iters=100` and `density_weight=1000` only on scan-positive benchmarks: `ibm02`, `ibm06`, `ibm08`, `ibm10`, `ibm13`, and `ibm14`.
+
+Scan result:
+
+```bash
+uv run python scripts/scan_candidates.py \
+  --run-id scan-density-search-all-20260501 \
+  --baseline /Users/jaydenpiao/Desktop/hrt_challenge/macro-place-challenge-2026/results/runpod-auto-profile-20260501-023124/summary.json \
+  --variant d1000s100:JAYDEN_SEARCH_ITERS=100\;JAYDEN_DENSITY_WEIGHT=1000
+```
+
+Applying the density search globally was worse overall (`+0.000181` average delta), but it identified six net-positive benchmark profiles.
+
+Promoted command:
+
+```bash
+uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-density-profile-20260501
+uv run python scripts/check_results.py results/all-ibm-density-profile-20260501/summary.json --max-runtime 3300 --max-avg-proxy 1.4555341427
+uv run python scripts/compare_results.py /Users/jaydenpiao/Desktop/hrt_challenge/macro-place-challenge-2026/results/runpod-auto-profile-20260501-023124/summary.json results/all-ibm-density-profile-20260501/summary.json --json results/all-ibm-density-profile-20260501/comparison.json
+```
+
+Aggregate result:
+
+- average proxy: `1.4553974306`
+- total hard overlaps: `0`
+- max local runtime: `29.31s`
+- comparison vs `runpod-auto-profile-20260501-023124`: delta `-0.0001367120`, 6 benchmarks improved, 0 regressed
+
+Improved benchmarks:
+
+- `ibm02`: `-0.000828`
+- `ibm06`: `-0.000601`
+- `ibm08`: `-0.000038`
+- `ibm10`: `-0.000680`
+- `ibm13`: `-0.000159`
+- `ibm14`: `-0.000018`
+
+Interpretation:
+
+- This is a small but clean score improvement and should be validated on RunPod Linux/GPU after merge.
+- Generic hard-macro search remains unsafe for the weak benchmarks; density-aware search should remain benchmark-scheduled until a stronger exact-screened candidate selector exists.

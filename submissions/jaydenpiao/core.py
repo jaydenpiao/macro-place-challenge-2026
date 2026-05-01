@@ -14,6 +14,7 @@ from macro_place.benchmark import Benchmark
 
 DEFAULT_SEARCH_ITERS = 0
 DEFAULT_LEGAL_GAP = 0.01
+DEFAULT_DENSITY_WEIGHT = 0.0
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class PlacerConfig:
     legal_gap: float = DEFAULT_LEGAL_GAP
     transform: str = "auto"
     strategy: str = "auto"
+    density_weight: float = DEFAULT_DENSITY_WEIGHT
 
 
 AUTO_TRANSFORMS = {
@@ -38,18 +40,18 @@ AUTO_TRANSFORMS = {
 
 AUTO_STRATEGY_PROFILES = {
     "ibm01": {"legal_gap": 0.005},
-    "ibm02": {"search_iters": 100},
+    "ibm02": {"search_iters": 100, "density_weight": 1000.0},
     "ibm03": {"legal_gap": 0.02},
     "ibm04": {"legal_gap": 0.001},
-    "ibm06": {"legal_gap": 0.001},
+    "ibm06": {"legal_gap": 0.001, "search_iters": 100, "density_weight": 1000.0},
     "ibm07": {"legal_gap": 0.001},
-    "ibm08": {"legal_gap": 0.005},
+    "ibm08": {"legal_gap": 0.005, "search_iters": 100, "density_weight": 1000.0},
     "ibm09": {"legal_gap": 0.02},
-    "ibm10": {"legal_gap": 0.005},
+    "ibm10": {"legal_gap": 0.005, "search_iters": 100, "density_weight": 1000.0},
     "ibm11": {"legal_gap": 0.02},
     "ibm12": {"legal_gap": 0.02},
-    "ibm13": {"legal_gap": 0.02},
-    "ibm14": {"legal_gap": 0.001},
+    "ibm13": {"legal_gap": 0.02, "search_iters": 100, "density_weight": 1000.0},
+    "ibm14": {"legal_gap": 0.001, "search_iters": 100, "density_weight": 1000.0},
     "ibm16": {"legal_gap": 0.02},
     "ibm18": {"legal_gap": 0.02},
 }
@@ -106,6 +108,7 @@ def build_placement(benchmark: Benchmark, config: PlacerConfig | None = None) ->
             seed=int(config.seed),
             iterations=int(config.search_iters),
             gap=float(config.legal_gap),
+            density_weight=float(config.density_weight),
         )
         hard_pos = legalize_hard_macros(
             hard_pos,
@@ -144,6 +147,10 @@ def effective_config_for_benchmark(benchmark: Benchmark, config: PlacerConfig) -
         updates["legal_gap"] = float(profile["legal_gap"])
     if "search_iters" in profile and int(config.search_iters) == DEFAULT_SEARCH_ITERS:
         updates["search_iters"] = int(profile["search_iters"])
+    if "density_weight" in profile and math.isclose(
+        float(config.density_weight), DEFAULT_DENSITY_WEIGHT, rel_tol=0.0, abs_tol=1.0e-12
+    ):
+        updates["density_weight"] = float(profile["density_weight"])
     if not updates:
         return config
     return replace(config, **updates)
@@ -381,6 +388,7 @@ def _local_search(
     seed: int,
     iterations: int,
     gap: float,
+    density_weight: float = 0.0,
 ) -> np.ndarray:
     incident = _incident_nets(benchmark)
     active = [idx for idx in np.where(movable)[0].tolist() if incident[idx]]
@@ -393,11 +401,12 @@ def _local_search(
     canvas_height = float(benchmark.canvas_height)
     initial_temp = max(canvas_width, canvas_height) * 0.025
     final_temp = max(canvas_width, canvas_height) * 0.001
+    current_density = _density_surrogate_cost(pos, benchmark) if density_weight > 0.0 else 0.0
 
     for step in range(iterations):
         idx = rng.choice(active)
         old = pos[idx].copy()
-        old_cost = _incident_cost(idx, pos, benchmark, incident)
+        old_cost = _incident_cost(idx, pos, benchmark, incident) + density_weight * current_density
         frac = step / max(iterations - 1, 1)
         temp = initial_temp * ((final_temp / initial_temp) ** frac)
 
@@ -426,13 +435,17 @@ def _local_search(
             pos[idx] = old
             continue
 
-        new_cost = _incident_cost(idx, pos, benchmark, incident)
+        new_density = _density_surrogate_cost(pos, benchmark) if density_weight > 0.0 else 0.0
+        new_cost = _incident_cost(idx, pos, benchmark, incident) + density_weight * new_density
         delta = new_cost - old_cost
         if delta <= 0:
+            current_density = new_density
             continue
         accept = rng.random() < math.exp(-delta / max(temp, 1.0e-9))
         if not accept:
             pos[idx] = old
+        else:
+            current_density = new_density
 
     return pos
 
@@ -452,9 +465,53 @@ def _incident_cost(
     return sum(_net_hpwl(net_id, hard_pos, benchmark) for net_id in incident[idx])
 
 
+def _density_surrogate_cost(hard_pos: np.ndarray, benchmark: Benchmark) -> float:
+    full_pos = benchmark.macro_positions.detach().cpu().numpy().astype(np.float64, copy=True)
+    full_pos[: benchmark.num_hard_macros] = hard_pos
+    sizes = benchmark.macro_sizes.detach().cpu().numpy().astype(np.float64, copy=False)
+    grid = np.zeros((int(benchmark.grid_rows), int(benchmark.grid_cols)), dtype=np.float64)
+    bin_w = float(benchmark.canvas_width) / max(int(benchmark.grid_cols), 1)
+    bin_h = float(benchmark.canvas_height) / max(int(benchmark.grid_rows), 1)
+    bin_area = max(bin_w * bin_h, 1.0e-12)
+
+    for center, size in zip(full_pos, sizes):
+        min_x = max(0.0, center[0] - size[0] / 2.0)
+        max_x = min(float(benchmark.canvas_width), center[0] + size[0] / 2.0)
+        min_y = max(0.0, center[1] - size[1] / 2.0)
+        max_y = min(float(benchmark.canvas_height), center[1] + size[1] / 2.0)
+        if max_x <= min_x or max_y <= min_y:
+            continue
+        col0 = max(0, min(int(math.floor(min_x / bin_w)), int(benchmark.grid_cols) - 1))
+        col1 = max(0, min(int(math.floor((max_x - 1.0e-12) / bin_w)), int(benchmark.grid_cols) - 1))
+        row0 = max(0, min(int(math.floor(min_y / bin_h)), int(benchmark.grid_rows) - 1))
+        row1 = max(0, min(int(math.floor((max_y - 1.0e-12) / bin_h)), int(benchmark.grid_rows) - 1))
+        for row in range(row0, row1 + 1):
+            cell_min_y = row * bin_h
+            cell_max_y = cell_min_y + bin_h
+            overlap_y = max(0.0, min(max_y, cell_max_y) - max(min_y, cell_min_y))
+            if overlap_y <= 0.0:
+                continue
+            for col in range(col0, col1 + 1):
+                cell_min_x = col * bin_w
+                cell_max_x = cell_min_x + bin_w
+                overlap_x = max(0.0, min(max_x, cell_max_x) - max(min_x, cell_min_x))
+                if overlap_x > 0.0:
+                    grid[row, col] += (overlap_x * overlap_y) / bin_area
+
+    flat = np.sort(grid.reshape(-1))
+    top_k = max(1, int(math.ceil(flat.size * 0.1)))
+    return float(np.mean(np.square(flat[-top_k:])))
+
+
 def _net_hpwl(net_id: int, hard_pos: np.ndarray, benchmark: Benchmark) -> float:
-    nodes = benchmark.net_nodes[net_id].tolist()
-    points = [_owner_position(owner, hard_pos, benchmark) for owner in nodes]
+    if len(benchmark.net_pin_nodes) > net_id and benchmark.net_pin_nodes[net_id].numel() > 0:
+        points = [
+            _pin_position(owner, slot, hard_pos, benchmark)
+            for owner, slot in benchmark.net_pin_nodes[net_id].tolist()
+        ]
+    else:
+        nodes = benchmark.net_nodes[net_id].tolist()
+        points = [_owner_position(owner, hard_pos, benchmark) for owner in nodes]
     if len(points) <= 1:
         return 0.0
     arr = np.asarray(points, dtype=np.float64)
@@ -471,6 +528,23 @@ def _owner_position(owner: int, hard_pos: np.ndarray, benchmark: Benchmark) -> n
     if 0 <= port_idx < benchmark.port_positions.shape[0]:
         return benchmark.port_positions[port_idx].detach().cpu().numpy().astype(np.float64)
     return np.zeros(2, dtype=np.float64)
+
+
+def _pin_position(
+    owner: int,
+    slot: int,
+    hard_pos: np.ndarray,
+    benchmark: Benchmark,
+) -> np.ndarray:
+    center = _owner_position(owner, hard_pos, benchmark)
+    if owner >= benchmark.num_hard_macros:
+        return center
+    if owner >= len(benchmark.macro_pin_offsets):
+        return center
+    offsets = benchmark.macro_pin_offsets[owner]
+    if slot < 0 or slot >= offsets.shape[0]:
+        return center
+    return center + offsets[slot].detach().cpu().numpy().astype(np.float64)
 
 
 def _move_toward_net_centroid(
