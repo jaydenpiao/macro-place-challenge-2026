@@ -79,6 +79,7 @@ def build_summary(
                 "JAYDEN_LEGAL_GAP",
                 "JAYDEN_TRANSFORM",
                 "JAYDEN_STRATEGY",
+                "JAYDEN_DENSITY_WEIGHT",
             ]
         },
         "benchmarks": clean_results,

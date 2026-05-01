@@ -183,8 +183,10 @@ def test_auto_strategy_uses_learned_profile_only_when_enabled():
     )
 
     assert auto.search_iters == 100
+    assert auto.density_weight == pytest.approx(1000.0)
     assert auto.legal_gap == pytest.approx(0.01)
     assert baseline.search_iters == 0
+    assert baseline.density_weight == pytest.approx(0.0)
     assert baseline.legal_gap == pytest.approx(0.01)
 
 
@@ -196,15 +198,69 @@ def test_auto_strategy_keeps_explicit_user_knobs():
         fixed=torch.tensor([False, False]),
         num_hard=2,
     )
-    benchmark.name = "ibm01"
+    benchmark.name = "ibm02"
 
     config = core.effective_config_for_benchmark(
         benchmark,
-        core.PlacerConfig(strategy="auto", legal_gap=0.123, search_iters=7),
+        core.PlacerConfig(strategy="auto", legal_gap=0.123, search_iters=7, density_weight=25.0),
     )
 
     assert config.legal_gap == pytest.approx(0.123)
     assert config.search_iters == 7
+    assert config.density_weight == pytest.approx(25.0)
+
+
+def test_placer_reads_density_weight_env(monkeypatch):
+    monkeypatch.setenv("JAYDEN_DENSITY_WEIGHT", "25.5")
+    module_path = Path("submissions/jaydenpiao/placer.py")
+    spec = importlib.util.spec_from_file_location("density_env_placer", module_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    placer = module.JaydenPiaoPlacer()
+
+    assert placer.config.density_weight == pytest.approx(25.5)
+
+
+def test_local_search_hpwl_uses_hard_macro_pin_offsets_when_available():
+    core = _load_submission_core()
+    benchmark = _benchmark(
+        positions=torch.tensor([[5.0, 5.0], [9.0, 5.0]]),
+        sizes=torch.tensor([[1.0, 1.0], [1.0, 1.0]]),
+        fixed=torch.tensor([False, False]),
+        num_hard=2,
+    )
+    benchmark.net_nodes = [torch.tensor([0, 1])]
+    benchmark.net_pin_nodes = [torch.tensor([[0, 0], [1, 0]])]
+    benchmark.num_nets = 1
+    benchmark.net_weights = torch.tensor([1.0])
+    benchmark.macro_pin_offsets = [
+        torch.tensor([[2.0, 0.0]]),
+        torch.tensor([[-2.0, 0.0]]),
+    ]
+
+    center_hpwl = core._net_hpwl(0, benchmark.macro_positions.numpy(), benchmark)
+
+    assert center_hpwl == pytest.approx(0.0)
+
+
+def test_density_surrogate_penalizes_clustered_macros():
+    core = _load_submission_core()
+    benchmark = _benchmark(
+        positions=torch.tensor([[1.25, 1.25], [8.75, 8.75]]),
+        sizes=torch.tensor([[1.0, 1.0], [1.0, 1.0]]),
+        fixed=torch.tensor([False, False]),
+        num_hard=2,
+    )
+    clustered = torch.tensor([[3.75, 3.75], [3.75, 3.75]]).numpy()
+    spread = torch.tensor([[1.25, 1.25], [8.75, 8.75]]).numpy()
+
+    clustered_cost = core._density_surrogate_cost(clustered, benchmark)
+    spread_cost = core._density_surrogate_cost(spread, benchmark)
+
+    assert clustered_cost > spread_cost
 
 
 def test_placer_legalizer_only_is_valid_on_ibm06(monkeypatch):

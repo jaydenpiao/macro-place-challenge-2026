@@ -89,23 +89,23 @@ submissions/jaydenpiao/placer.py
 
 Current real-benchmark smoke:
 
-- `uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-auto-profile-schedule`
-- `uv run python scripts/check_results.py results/all-ibm-auto-profile-schedule/summary.json --max-runtime 3300 --max-avg-proxy 1.4559245531`
+- `uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-density-profile-20260501`
+- `uv run python scripts/check_results.py results/all-ibm-density-profile-20260501/summary.json --max-runtime 3300 --max-avg-proxy 1.4555341427`
 - all 17 IBM benchmarks valid
-- average proxy `1.4555341426`
+- average proxy `1.4553974306`
 - total hard overlaps `0`
-- max local runtime `30.39s`
-- comparison vs `all-ibm-auto-transform`: average delta `-0.0003904104`, 15 benchmarks improved, 0 regressed
+- max local runtime `29.31s`
+- comparison vs `runpod-auto-profile-20260501-023124`: average delta `-0.0001367120`, 6 benchmarks improved, 0 regressed
 - `ibm01` proxy `1.0381`
 - wirelength `0.067`
 - density `0.812`
 - congestion `1.130`
 - overlaps `0`
-- runtime `1.24s`
+- runtime `1.21s`
 
-The current implementation is a deterministic legalizer-first baseline with cheap benchmark-specific symmetry recipes behind `JAYDEN_TRANSFORM=auto` and learned benchmark-specific knob schedules behind `JAYDEN_STRATEGY=auto`. Global hypergraph local search remains off by default, except the learned profile enables a small bounded search on `ibm02`. Score improvements should be isolated in small PRs.
+The current implementation is a deterministic legalizer-first baseline with cheap benchmark-specific symmetry recipes behind `JAYDEN_TRANSFORM=auto` and learned benchmark-specific knob schedules behind `JAYDEN_STRATEGY=auto`. The learned profile now enables small bounded density-aware local search only on benchmarks where scans showed net gain: `ibm02`, `ibm06`, `ibm08`, `ibm10`, `ibm13`, and `ibm14`. Score improvements should be isolated in small PRs.
 
-The same `auto` default has now reproduced on RunPod Linux/GPU at `1.4555341426` with zero overlaps. This is direct Linux/GPU validation only, not official Docker parity.
+The previous `auto` default reproduced on RunPod Linux/GPU at `1.4555341426` with zero overlaps. The density-aware profile still needs RunPod Linux/GPU validation and strict Docker parity. This is direct Linux/GPU validation only, not official Docker parity.
 
 Candidate variant scans should use `scripts/scan_candidates.py` so every run produces per-variant `summary.json` files plus one aggregate `scan_summary.json` with deltas against the current baseline.
 
