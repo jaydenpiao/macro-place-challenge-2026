@@ -247,3 +247,51 @@ Interpretation:
 
 - This is a small but clean improvement and should become the default if CI and review pass.
 - It is not enough to approach top-7; the next scoring lane needs real placement moves, not just global knob schedules.
+
+## 2026-05-01 - Auto profile RunPod direct validation
+
+Purpose: validate the merged `JAYDEN_STRATEGY=auto` default on a Linux NVIDIA GPU host and record the strict parity preflight status.
+
+RunPod setup:
+
+- pod id: `if1pc3fdpisfqg`
+- template: `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
+- GPU: NVIDIA RTX 6000 Ada Generation, 49140 MiB, driver `570.195.03`
+- vCPU allocation reported by RunPod: 16
+- repo commit: `53390e1fff20017258b9967dda136fbc94f258f4`
+- run id: `runpod-auto-profile-20260501-023124`
+- result artifact: `results/runpod-auto-profile-20260501-023124/summary.json` (ignored by git)
+- pod deleted after artifact collection; `runpodctl pod list` returned `[]`
+
+Direct Linux/GPU command:
+
+```bash
+git clone https://github.com/jaydenpiao/macro-place-challenge-2026.git
+cd macro-place-challenge-2026
+git checkout 53390e1fff20017258b9967dda136fbc94f258f4
+git submodule update --init external/MacroPlacement
+uv sync --extra dev
+set -a && source configs/cloud_gpu.env && set +a
+uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id runpod-auto-profile-20260501-023124
+uv run python scripts/check_results.py results/runpod-auto-profile-20260501-023124/summary.json --max-runtime 3300 --max-avg-proxy 1.4559245531
+```
+
+Aggregate result:
+
+- average proxy: `1.4555341426`
+- total hard overlaps: `0`
+- max runtime: `53.67s`
+- total runtime: `168.31s`
+- benchmark validity: all 17 IBM benchmarks valid
+
+Strict parity preflight:
+
+```text
+cloud parity preflight failed: docker client/server failed with exit 127: [Errno 2] No such file or directory: 'docker'
+```
+
+Interpretation:
+
+- The current `auto` default reproduced on Linux/GPU with the same score as local all-IBM validation and no legality regression.
+- This is still not official air-gapped Docker parity because the RunPod PyTorch image has no Docker daemon.
+- Do not spend more time on global knob sweeps; the next scoring lane should implement real macro moves, soft-density cleanup, or exact-proxy-screened local refinement for `ibm18`, `ibm17`, `ibm06`, `ibm12`, `ibm15`, and `ibm14`.
