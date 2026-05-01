@@ -41,7 +41,28 @@ Note: plain `uv run pytest` did not install the optional `dev` extra and used th
 
 ## Cloud GPU Check
 
-RunPod direct Linux/GPU validation completed on 2026-05-01 using the current `auto` default:
+RunPod direct Linux/GPU validation completed on 2026-05-01 using the current density-aware `auto` default:
+
+- RunPod secure cloud `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
+- NVIDIA RTX 6000 Ada Generation, 49140 MiB, driver `570.211.01`
+- repo commit `fcfe2640d40b655b902921636f88d4f622d9e2aa`
+- result artifact: `results/runpod-density-profile-20260501-043910/summary.json` (ignored by git)
+
+Result:
+
+- all 17 IBM benchmarks valid
+- average proxy `1.4553974306`
+- total hard overlaps `0`
+- max runtime `77.31s`
+- total runtime `246.37s`
+
+Strict Docker parity was not run on this host because `scripts/check_cloud_parity_host.py` correctly refused the RunPod PyTorch image:
+
+```text
+cloud parity preflight failed: docker client/server failed with exit 127: [Errno 2] No such file or directory: 'docker'
+```
+
+Prior RunPod direct Linux/GPU validation completed on 2026-05-01 using the previous `auto` default:
 
 - RunPod secure cloud `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
 - NVIDIA RTX 6000 Ada Generation, 49140 MiB, driver `570.195.03`
@@ -105,7 +126,7 @@ Current real-benchmark smoke:
 
 The current implementation is a deterministic legalizer-first baseline with cheap benchmark-specific symmetry recipes behind `JAYDEN_TRANSFORM=auto` and learned benchmark-specific knob schedules behind `JAYDEN_STRATEGY=auto`. The learned profile now enables small bounded density-aware local search only on benchmarks where scans showed net gain: `ibm02`, `ibm06`, `ibm08`, `ibm10`, `ibm13`, and `ibm14`. Score improvements should be isolated in small PRs.
 
-The previous `auto` default reproduced on RunPod Linux/GPU at `1.4555341426` with zero overlaps. The density-aware profile still needs RunPod Linux/GPU validation and strict Docker parity. This is direct Linux/GPU validation only, not official Docker parity.
+The current density-aware `auto` default reproduced on RunPod Linux/GPU at `1.4553974306` with zero overlaps. This is direct Linux/GPU validation only, not official Docker parity.
 
 Candidate variant scans should use `scripts/scan_candidates.py` so every run produces per-variant `summary.json` files plus one aggregate `scan_summary.json` with deltas against the current baseline.
 
