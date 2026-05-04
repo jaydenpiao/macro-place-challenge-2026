@@ -12,3 +12,7 @@ Each run should produce at least:
 - `summary.json`
 - optional `run.log`
 - optional visualization or ORFS artifacts for finalist candidates
+
+Offline structural searches created by `scripts/search_candidates.py` also write:
+
+- `candidate_trace.jsonl`: exact proxy score records and replayable candidate recipes

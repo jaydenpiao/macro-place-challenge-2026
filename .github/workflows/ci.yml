@@ -34,7 +34,10 @@ jobs:
         run: uv sync --extra dev
 
       - name: Check formatting
-        run: uv run --extra dev black --check submissions/jaydenpiao scripts/run_experiment.py scripts/check_results.py scripts/compare_results.py scripts/check_cloud_parity_host.py scripts/scan_candidates.py test/test_jaydenpiao_submission.py test/test_experiment_harness.py test/test_cloud_parity_preflight.py test/test_candidate_scanner.py
+        run: uv run --extra dev black --check submissions/jaydenpiao scripts/run_experiment.py scripts/check_results.py scripts/compare_results.py scripts/check_cloud_parity_host.py scripts/scan_candidates.py scripts/search_candidates.py test/test_jaydenpiao_submission.py test/test_experiment_harness.py test/test_cloud_parity_preflight.py test/test_candidate_scanner.py test/test_exact_candidate_search.py
+
+      - name: Lint touched Python entry points
+        run: uv run --extra dev flake8 scripts/search_candidates.py test/test_exact_candidate_search.py
 
       - name: Run tests
         run: uv run --extra dev pytest
