@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-05-01
+Last updated: 2026-05-04
 
 ## Repository
 
@@ -130,9 +130,20 @@ The current density-aware `auto` default reproduced on RunPod Linux/GPU at `1.45
 
 Candidate variant scans should use `scripts/scan_candidates.py` so every run produces per-variant `summary.json` files plus one aggregate `scan_summary.json` with deltas against the current baseline.
 
+Structural candidate searches should use `scripts/search_candidates.py`. This is an offline exact-proxy-screened lane that starts from the current placer output, generates legal hard-macro move candidates, writes `results/<run-id>/summary.json`, and records deterministic candidate recipes in `results/<run-id>/candidate_trace.jsonl`. It does not change default submission behavior.
+
+Example smoke:
+
+```bash
+uv run python scripts/search_candidates.py --run-id exact-search-smoke --benchmarks ibm01 --families single --step-fractions 0.02 --max-candidates-per-benchmark 4
+uv run python scripts/check_results.py results/exact-search-smoke/summary.json --max-runtime 3300 --max-avg-proxy 1.5
+```
+
+The 2026-05-04 smoke selected the existing `ibm01` baseline (`1.0381`) after screening 4 legal single-move candidates. Treat this as harness validation only, not a score improvement.
+
 ## Next Priorities
 
 1. Run the official air-gapped Docker path before any leaderboard submission.
 2. Use a GPU VM or a custom verified RunPod Docker template for `scripts/run_cloud_parity.sh`; the wrapper now preflights Docker, host NVIDIA, and Docker GPU visibility before evaluating.
-3. Iterate on hybrid analytical placement plus local search to chase the top-7 cutoff.
+3. Run exact-proxy structural searches on weak IBM benchmarks: `ibm18`, `ibm17`, `ibm06`, `ibm12`, `ibm15`, `ibm14`, and `ibm02`.
 4. Run NG45/OpenROAD-flow-scripts checks for finalist candidates.

@@ -394,3 +394,37 @@ Interpretation:
 - The density-aware `auto` default reproduced on Linux/GPU with the same average proxy as the local all-IBM run and no legality regression.
 - This is still not official air-gapped Docker parity because the RunPod PyTorch image has no Docker daemon.
 - Next scoring work should target a larger algorithmic move; this PR only harvests a small safe local-search schedule.
+
+## 2026-05-04 - Exact-proxy structural candidate search harness
+
+Purpose: add an offline lane for structural macro-move experiments that uses the official proxy as the judge without changing default submission behavior.
+
+Implementation:
+
+- `scripts/search_candidates.py` starts from the current placer output for each benchmark.
+- Candidate families currently include single hard-macro moves, similar-size swaps, density push moves, and transform probes.
+- Every candidate is hard-macro legal before scoring; fixed hard macros are preserved.
+- The script writes `results/<run-id>/summary.json` and `results/<run-id>/candidate_trace.jsonl`.
+- `summary.json` remains compatible with `scripts/check_results.py`; traces keep deterministic recipes for later promotion work.
+
+Smoke command:
+
+```bash
+uv run python scripts/search_candidates.py --run-id exact-search-smoke --benchmarks ibm01 --families single --step-fractions 0.02 --max-candidates-per-benchmark 4
+uv run python scripts/check_results.py results/exact-search-smoke/summary.json --max-runtime 3300 --max-avg-proxy 1.5
+```
+
+Smoke result:
+
+- `ibm01` baseline proxy: `1.0381`
+- best screened proxy: `1.0381`
+- selected candidate: `baseline`
+- candidate count: `4`
+- total hard overlaps: `0`
+- runtime: `15.53s`
+
+Interpretation:
+
+- This is infrastructure, not a promoted scoring change.
+- Use this lane for weak-benchmark hard-macro LNS experiments before touching `submissions/jaydenpiao`.
+- Candidate caps are enforced during generation because legalization can dominate runtime on large IBM designs.
