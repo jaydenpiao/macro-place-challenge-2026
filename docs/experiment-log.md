@@ -473,3 +473,58 @@ Interpretation:
 
 - This branch is infrastructure only.
 - The useful follow-up is a separate scoring branch that replays general density-rank behavior from screened recipes, not this harness PR.
+
+## 2026-05-06 - Exact-v1 density-rank profile
+
+Purpose: promote the repeatable density-push behavior discovered by offline exact-proxy screening without hardcoding final coordinates.
+
+Implementation:
+
+- `JAYDEN_RECIPE_PROFILE=exact_v1` computes the densest placement bin at runtime.
+- Movable hard macros are ranked by distance from that dense bin.
+- The selected rank is pushed outward by a learned canvas-relative step fraction, then hard macros are re-legalized.
+- The default profile is now `exact_v1`; set `JAYDEN_RECIPE_PROFILE=off` for ablations.
+- Learned recipes:
+  - `ibm06`: rank `0`, step fraction `0.32`
+  - `ibm12`: rank `0`, step fraction `0.13`
+  - `ibm02`: rank `1`, step fraction `0.13`
+
+Search evidence:
+
+```bash
+uv run python -u scripts/search_candidates.py \
+  --run-id exact-search-density-scale-v2 \
+  --benchmarks ibm06,ibm02 \
+  --families density \
+  --step-fractions 0.13,0.18,0.24,0.32 \
+  --max-candidates-per-benchmark 32
+```
+
+Result:
+
+- `ibm06`: `1.6946487427 -> 1.6580262184`, selected `density-m23-0.32`
+- `ibm02`: `1.5595490932 -> 1.5495135784`, selected `density-m52-0.13`
+- total hard overlaps `0`
+
+Promotion command:
+
+```bash
+uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-exact-v1-default
+uv run python scripts/check_results.py results/all-ibm-exact-v1-default/summary.json --max-runtime 3300 --max-avg-proxy 1.4553974306
+uv run python scripts/compare_results.py /Users/jaydenpiao/Desktop/hrt_challenge/macro-place-challenge-2026/results/runpod-density-profile-20260501-043910/summary.json results/all-ibm-exact-v1-default/summary.json --json results/all-ibm-exact-v1-default/comparison.json
+```
+
+Aggregate result:
+
+- average proxy: `1.4526220069`
+- total hard overlaps: `0`
+- max local runtime: `30.19s`
+- comparison vs `runpod-density-profile-20260501-043910`: delta `-0.0027754245`
+- improved benchmarks: `ibm02`, `ibm06`, `ibm12`
+- regressed benchmarks: `0`
+
+Interpretation:
+
+- This is a clean checkpoint improvement over `1.4553974306`.
+- It does not reach the next target around `1.4421`, so the next branch needs multi-move density relief or LNS rather than more one-move density tweaks.
+- This result is local macOS validation only. RunPod Linux/GPU and strict Docker parity remain deferred until a stronger candidate justifies cloud spend.

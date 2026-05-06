@@ -39,6 +39,35 @@ def _benchmark(
     )
 
 
+def _density_profile_benchmark(name: str, fixed: list[bool] | None = None) -> Benchmark:
+    benchmark = _benchmark(
+        positions=torch.tensor(
+            [
+                [3.0, 2.5],
+                [7.5, 2.5],
+                [8.0, 8.0],
+                [2.5, 2.5],
+                [2.6, 2.5],
+            ]
+        ),
+        sizes=torch.tensor(
+            [
+                [0.5, 0.5],
+                [0.5, 0.5],
+                [0.5, 0.5],
+                [2.0, 2.0],
+                [1.0, 1.0],
+            ]
+        ),
+        fixed=torch.tensor(fixed or [False, False, False, False, False]),
+        num_hard=3,
+    )
+    benchmark.name = name
+    benchmark.grid_rows = 2
+    benchmark.grid_cols = 2
+    return benchmark
+
+
 def _load_submission_core():
     path = Path("submissions/jaydenpiao/core.py")
     spec = importlib.util.spec_from_file_location("jaydenpiao_core", path)
@@ -222,6 +251,99 @@ def test_placer_reads_density_weight_env(monkeypatch):
     placer = module.JaydenPiaoPlacer()
 
     assert placer.config.density_weight == pytest.approx(25.5)
+
+
+def test_placer_reads_recipe_profile_env(monkeypatch):
+    monkeypatch.setenv("JAYDEN_RECIPE_PROFILE", "exact_v1")
+    module_path = Path("submissions/jaydenpiao/placer.py")
+    spec = importlib.util.spec_from_file_location("recipe_env_placer", module_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    placer = module.JaydenPiaoPlacer()
+
+    assert placer.config.recipe_profile == "exact_v1"
+
+
+def test_recipe_profile_defaults_to_exact_v1_and_off_preserves_baseline():
+    core = _load_submission_core()
+    benchmark = _density_profile_benchmark("ibm06")
+
+    default = core.build_placement(
+        benchmark, core.PlacerConfig(strategy="baseline", transform="identity")
+    )
+    explicit_off = core.build_placement(
+        benchmark,
+        core.PlacerConfig(strategy="baseline", transform="identity", recipe_profile="off"),
+    )
+    exact_v1 = core.build_placement(
+        benchmark,
+        core.PlacerConfig(strategy="baseline", transform="identity", recipe_profile="exact_v1"),
+    )
+
+    assert torch.allclose(default, exact_v1)
+    assert not torch.allclose(
+        explicit_off[: benchmark.num_hard_macros], default[: benchmark.num_hard_macros]
+    )
+
+
+def test_recipe_profile_rejects_unknown_profile():
+    core = _load_submission_core()
+    benchmark = _benchmark(
+        positions=torch.tensor([[3.0, 2.5], [6.0, 2.5]]),
+        sizes=torch.tensor([[0.5, 0.5], [0.5, 0.5]]),
+        fixed=torch.tensor([False, False]),
+        num_hard=2,
+    )
+
+    with pytest.raises(ValueError, match="unsupported recipe profile"):
+        core.build_placement(benchmark, core.PlacerConfig(recipe_profile="not-a-profile"))
+
+
+def test_exact_v1_density_profile_is_deterministic_and_legal():
+    core = _load_submission_core()
+    benchmark = _density_profile_benchmark("ibm06")
+
+    config = core.PlacerConfig(strategy="baseline", transform="identity", recipe_profile="exact_v1")
+    first = core.build_placement(benchmark, config)
+    second = core.build_placement(benchmark, config)
+    overlaps = compute_overlap_metrics(first, benchmark)
+
+    assert torch.allclose(first, second)
+    assert first[0, 0] == pytest.approx(6.2)
+    assert first[0, 1] == pytest.approx(2.5)
+    assert overlaps["overlap_count"] == 0
+
+
+def test_exact_v1_density_profile_uses_configured_density_rank():
+    core = _load_submission_core()
+    benchmark = _density_profile_benchmark("ibm02")
+
+    placement = core.build_placement(
+        benchmark,
+        core.PlacerConfig(strategy="baseline", transform="identity", recipe_profile="exact_v1"),
+    )
+
+    assert placement[0, 0] == pytest.approx(3.0)
+    assert placement[0, 1] == pytest.approx(2.5)
+    assert placement[1, 0] == pytest.approx(8.8)
+    assert placement[1, 1] == pytest.approx(2.5)
+
+
+def test_exact_v1_density_profile_preserves_fixed_hard_macros():
+    core = _load_submission_core()
+    benchmark = _density_profile_benchmark("ibm06", fixed=[True, False, False, False, False])
+
+    placement = core.build_placement(
+        benchmark,
+        core.PlacerConfig(strategy="baseline", transform="identity", recipe_profile="exact_v1"),
+    )
+    overlaps = compute_overlap_metrics(placement, benchmark)
+
+    assert torch.equal(placement[0], benchmark.macro_positions[0])
+    assert overlaps["overlap_count"] == 0
 
 
 def test_local_search_hpwl_uses_hard_macro_pin_offsets_when_available():
