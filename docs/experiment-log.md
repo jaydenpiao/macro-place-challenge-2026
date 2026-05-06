@@ -428,3 +428,48 @@ Interpretation:
 - This is infrastructure, not a promoted scoring change.
 - Use this lane for weak-benchmark hard-macro LNS experiments before touching `submissions/jaydenpiao`.
 - Candidate caps are enforced during generation because legalization can dominate runtime on large IBM designs.
+
+## 2026-05-06 - Exact-search per-family cap
+
+Purpose: keep broad exact-proxy sweeps from spending the entire benchmark candidate budget on the first enabled move family.
+
+Implementation:
+
+- `scripts/search_candidates.py` now accepts `--max-candidates-per-family`.
+- The cap is applied independently as each family is generated, while `--max-candidates-per-benchmark` remains the total benchmark cap.
+- `summary.json` records the per-family cap in `search_config` for reproducibility.
+- No default submission behavior changed.
+
+Validation:
+
+```bash
+uv run --extra dev pytest test/test_exact_candidate_search.py::test_candidate_generation_applies_per_family_candidate_cap test/test_exact_candidate_search.py::test_summary_records_search_metadata_and_aggregate_best_proxy
+```
+
+Result:
+
+- `2 passed`
+
+Search evidence:
+
+```bash
+uv run python -u scripts/search_candidates.py \
+  --run-id exact-search-weak-v1-family2 \
+  --benchmarks ibm18,ibm17,ibm06,ibm12,ibm15,ibm14,ibm02 \
+  --families single,density,swap,transform \
+  --step-fractions 0.01,0.02,0.05 \
+  --max-candidates-per-benchmark 64 \
+  --max-candidates-per-family 2
+```
+
+Aggregate result:
+
+- candidate count: `56`
+- improved benchmarks: `6`
+- total hard overlaps: `0`
+- best density candidates included `ibm06` `density-m23-0.02`, `ibm12` `density-m501-0.02`, and `ibm02` `density-m217-0.02`
+
+Interpretation:
+
+- This branch is infrastructure only.
+- The useful follow-up is a separate scoring branch that replays general density-rank behavior from screened recipes, not this harness PR.
