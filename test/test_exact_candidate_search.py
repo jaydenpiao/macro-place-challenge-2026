@@ -107,6 +107,54 @@ def test_candidate_generation_stops_when_max_candidates_is_reached(monkeypatch):
     assert calls == 2
 
 
+def test_candidate_generation_applies_per_family_candidate_cap(monkeypatch):
+    searcher = _load_searcher()
+    benchmark = _benchmark(
+        positions=torch.tensor([[2.0, 2.0], [5.0, 5.0], [8.0, 8.0]]),
+        sizes=torch.tensor([[1.0, 1.0], [1.0, 1.0], [1.0, 1.0]]),
+        fixed=torch.tensor([False, False, False]),
+        num_hard=3,
+    )
+    observed_limits = []
+
+    def family_generator(family):
+        def generate(benchmark, baseline, config, limit):
+            observed_limits.append((family, limit))
+            candidates = []
+            for idx in range(limit):
+                placement = baseline.clone()
+                placement[0, 0] += (len(observed_limits) * 10 + idx) * 0.001
+                candidates.append(
+                    searcher.Candidate(
+                        name=f"{family}-{idx}",
+                        family=family,
+                        recipe={"family": family, "benchmark": benchmark.name},
+                        placement=placement,
+                    )
+                )
+            return candidates
+
+        return generate
+
+    monkeypatch.setattr(searcher, "_single_move_candidates", family_generator("single"))
+    monkeypatch.setattr(searcher, "_density_push_candidates", family_generator("density"))
+    config = searcher.SearchConfig(
+        families=("single", "density"),
+        max_candidates_per_benchmark=10,
+        max_candidates_per_family=2,
+    )
+
+    candidates = searcher.generate_candidates(benchmark, benchmark.macro_positions, config)
+
+    assert observed_limits == [("single", 2), ("density", 2)]
+    assert [candidate.family for candidate in candidates] == [
+        "single",
+        "single",
+        "density",
+        "density",
+    ]
+
+
 def test_swap_candidates_are_deterministic_and_skip_dissimilar_macros():
     searcher = _load_searcher()
     benchmark = _benchmark(
@@ -253,7 +301,7 @@ def test_summary_records_search_metadata_and_aggregate_best_proxy(tmp_path):
         run_id="search-smoke",
         placer_path=Path("submissions/jaydenpiao/placer.py"),
         command=["search"],
-        config=searcher.SearchConfig(families=("single",)),
+        config=searcher.SearchConfig(families=("single",), max_candidates_per_family=2),
         results=[result],
         output_dir=output_dir,
     )
@@ -265,3 +313,4 @@ def test_summary_records_search_metadata_and_aggregate_best_proxy(tmp_path):
     assert summary["aggregate"]["improved_count"] == 1
     assert summary["benchmarks"][0]["proxy_cost"] == pytest.approx(1.5)
     assert summary["benchmarks"][0]["best_recipe"]["family"] == "single"
+    assert summary["search_config"]["max_candidates_per_family"] == 2

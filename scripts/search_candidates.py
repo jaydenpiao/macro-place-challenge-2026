@@ -47,6 +47,7 @@ class SearchConfig:
     families: tuple[str, ...] = ("single", "swap", "density", "transform")
     step_fractions: tuple[float, ...] = (0.02, 0.05, 0.1)
     max_candidates_per_benchmark: int = 128
+    max_candidates_per_family: int | None = None
     legal_gap: float = 0.01
     swap_area_ratio: float = 1.5
 
@@ -139,6 +140,8 @@ def generate_candidates(
         remaining = int(config.max_candidates_per_benchmark) - len(candidates)
         if remaining <= 0:
             return candidates
+        if config.max_candidates_per_family is not None:
+            remaining = min(remaining, int(config.max_candidates_per_family))
         if family == "single":
             generated = _single_move_candidates(benchmark, baseline_placement, config, remaining)
         elif family == "swap":
@@ -625,6 +628,7 @@ def run(args: argparse.Namespace) -> Path:
         families=_normalize_families(_parse_csv(args.families)),
         step_fractions=_parse_float_csv(args.step_fractions),
         max_candidates_per_benchmark=int(args.max_candidates_per_benchmark),
+        max_candidates_per_family=args.max_candidates_per_family,
         legal_gap=float(args.legal_gap),
         swap_area_ratio=float(args.swap_area_ratio),
     )
@@ -691,6 +695,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Comma-separated canvas-relative move step fractions.",
     )
     parser.add_argument("--max-candidates-per-benchmark", type=int, default=128)
+    parser.add_argument(
+        "--max-candidates-per-family",
+        type=int,
+        help="Optional cap for each candidate family before moving to the next family.",
+    )
     parser.add_argument("--legal-gap", type=float, default=0.01)
     parser.add_argument("--swap-area-ratio", type=float, default=1.5)
     parser.add_argument("--output-root", default="results")

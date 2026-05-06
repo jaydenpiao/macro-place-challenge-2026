@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-05-04
+Last updated: 2026-05-06
 
 ## Repository
 
@@ -132,6 +132,8 @@ Candidate variant scans should use `scripts/scan_candidates.py` so every run pro
 
 Structural candidate searches should use `scripts/search_candidates.py`. This is an offline exact-proxy-screened lane that starts from the current placer output, generates legal hard-macro move candidates, writes `results/<run-id>/summary.json`, and records deterministic candidate recipes in `results/<run-id>/candidate_trace.jsonl`. It does not change default submission behavior.
 
+Use `--max-candidates-per-family` on broad weak-benchmark sweeps so one move family cannot consume the whole benchmark candidate budget before density, swap, or transform probes run.
+
 Example smoke:
 
 ```bash
@@ -141,9 +143,11 @@ uv run python scripts/check_results.py results/exact-search-smoke/summary.json -
 
 The 2026-05-04 smoke selected the existing `ibm01` baseline (`1.0381`) after screening 4 legal single-move candidates. Treat this as harness validation only, not a score improvement.
 
+The 2026-05-06 weak-benchmark search artifact `results/exact-search-weak-v1-family2/summary.json` is also harness evidence. It used `--max-candidates-per-family 2` across `ibm18,ibm17,ibm06,ibm12,ibm15,ibm14,ibm02`, screened 56 candidates, kept total hard overlaps at `0`, and found small exact-proxy improvements on 6 of 7 benchmarks. Treat this as search evidence only; no recipe is promoted by the harness branch.
+
 ## Next Priorities
 
 1. Run the official air-gapped Docker path before any leaderboard submission.
 2. Use a GPU VM or a custom verified RunPod Docker template for `scripts/run_cloud_parity.sh`; the wrapper now preflights Docker, host NVIDIA, and Docker GPU visibility before evaluating.
-3. Run exact-proxy structural searches on weak IBM benchmarks: `ibm18`, `ibm17`, `ibm06`, `ibm12`, `ibm15`, `ibm14`, and `ibm02`.
+3. Promote only replayable exact-search recipes that beat the `1.4553974306` all-IBM baseline with zero overlaps; keep them behind environment knobs until the full all-IBM gate proves default improvement.
 4. Run NG45/OpenROAD-flow-scripts checks for finalist candidates.
