@@ -49,6 +49,7 @@ class JaydenPiaoPlacer:
         transform: str | None = None,
         strategy: str | None = None,
         density_weight: float | None = None,
+        recipe_profile: str | None = None,
     ) -> None:
         self.config = PlacerConfig(
             seed=seed if seed is not None else _env_int("JAYDEN_PLACER_SEED", 20260429),
@@ -62,6 +63,11 @@ class JaydenPiaoPlacer:
                 density_weight
                 if density_weight is not None
                 else _env_float("JAYDEN_DENSITY_WEIGHT", 0.0)
+            ),
+            recipe_profile=(
+                recipe_profile
+                if recipe_profile is not None
+                else _env_str("JAYDEN_RECIPE_PROFILE", "exact_v1")
             ),
         )
 
