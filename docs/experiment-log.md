@@ -528,3 +528,28 @@ Interpretation:
 - This is a clean checkpoint improvement over `1.4553974306`.
 - It does not reach the next target around `1.4421`, so the next branch needs multi-move density relief or LNS rather than more one-move density tweaks.
 - This result is local macOS validation only. RunPod Linux/GPU and strict Docker parity remain deferred until a stronger candidate justifies cloud spend.
+
+## 2026-05-08 - Multi-move exact-search harness
+
+Purpose: add a harness-only sequential search mode for testing whether multiple legal hard-macro moves compound into larger exact-proxy gains.
+
+Implementation:
+
+- `scripts/search_candidates.py` now accepts `--max-depth`.
+- `max_depth=1` keeps the existing one-shot candidate screening behavior.
+- `max_depth>1` applies the best legal improving move, recomputes candidates from that accepted placement, and repeats up to the configured depth.
+- Accepted trace records include the full accepted move sequence plus rounded hard-macro positions for each accepted intermediate placement.
+- No default submission behavior changed.
+
+Validation:
+
+```bash
+uv run --extra dev pytest test/test_exact_candidate_search.py
+uv run --extra dev black --check scripts/search_candidates.py test/test_exact_candidate_search.py
+uv run --extra dev flake8 scripts/search_candidates.py test/test_exact_candidate_search.py
+```
+
+Interpretation:
+
+- This is infrastructure only.
+- Use it first on weak IBM benchmarks with density-only depth 2 before adding swap or transform families.
