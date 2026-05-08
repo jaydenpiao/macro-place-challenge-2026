@@ -142,12 +142,13 @@ Candidate variant scans should use `scripts/scan_candidates.py` so every run pro
 
 Structural candidate searches should use `scripts/search_candidates.py`. This is an offline exact-proxy-screened lane that starts from the current placer output, generates legal hard-macro move candidates, writes `results/<run-id>/summary.json`, and records deterministic candidate recipes in `results/<run-id>/candidate_trace.jsonl`. It does not change default submission behavior.
 
-Use `--max-candidates-per-family` on broad weak-benchmark sweeps so one move family cannot consume the whole benchmark candidate budget before density, swap, or transform probes run.
+Use `--max-candidates-per-family` on broad weak-benchmark sweeps so one move family cannot consume the whole benchmark candidate budget before density, swap, or transform probes run. Use `--max-depth 2..5` for sequential accepted-move search; every depth recomputes candidates from the best accepted placement, records accepted intermediate hard-macro placements in `candidate_trace.jsonl`, and leaves default submission behavior unchanged.
 
 Example smoke:
 
 ```bash
 uv run python scripts/search_candidates.py --run-id exact-search-smoke --benchmarks ibm01 --families single --step-fractions 0.02 --max-candidates-per-benchmark 4
+uv run python scripts/search_candidates.py --run-id exact-search-depth2-smoke --benchmarks ibm01 --families density --step-fractions 0.02 --max-candidates-per-benchmark 4 --max-depth 2
 uv run python scripts/check_results.py results/exact-search-smoke/summary.json --max-runtime 3300 --max-avg-proxy 1.5
 ```
 
@@ -159,5 +160,5 @@ The 2026-05-06 weak-benchmark search artifact `results/exact-search-weak-v1-fami
 
 1. Run the official air-gapped Docker path before any leaderboard submission.
 2. Use a GPU VM or a custom verified RunPod Docker template for `scripts/run_cloud_parity.sh`; the wrapper now preflights Docker, host NVIDIA, and Docker GPU visibility before evaluating.
-3. Start the next larger algorithm branch: multi-move density-relief or LNS. The exact-v1 default is a checkpoint improvement, not enough for the current top-7 target.
+3. Run multi-move exact-search sweeps on weak IBM benchmarks, starting with density-only depth 2 and scaling only when traces show material gains.
 4. Run NG45/OpenROAD-flow-scripts checks for finalist candidates.

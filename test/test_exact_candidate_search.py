@@ -278,6 +278,128 @@ def test_screen_candidates_uses_exact_scores_and_writes_trace(tmp_path):
     assert records[0]["recipe"]["family"] == "baseline"
 
 
+def test_sequential_search_accepts_best_move_and_recomputes_candidates(tmp_path):
+    searcher = _load_searcher()
+    benchmark = _benchmark(
+        positions=torch.tensor([[5.0, 5.0], [8.0, 8.0]]),
+        sizes=torch.tensor([[1.0, 1.0], [1.0, 1.0]]),
+        fixed=torch.tensor([False, False]),
+        num_hard=2,
+    )
+    baseline = benchmark.macro_positions.clone()
+    generated_from = []
+
+    def generator(benchmark, current, config):
+        generated_from.append(float(current[0, 0]))
+        if float(current[0, 0]) == pytest.approx(5.0):
+            return [
+                searcher.Candidate(
+                    name="depth1-worse",
+                    family="synthetic",
+                    recipe={"family": "synthetic", "step": 1, "choice": "worse"},
+                    placement=current + torch.tensor([[-1.0, 0.0], [0.0, 0.0]]),
+                ),
+                searcher.Candidate(
+                    name="depth1-best",
+                    family="synthetic",
+                    recipe={"family": "synthetic", "step": 1, "choice": "best"},
+                    placement=current + torch.tensor([[-2.0, 0.0], [0.0, 0.0]]),
+                ),
+            ]
+        return [
+            searcher.Candidate(
+                name="depth2-best",
+                family="synthetic",
+                recipe={"family": "synthetic", "step": 2, "choice": "best"},
+                placement=current + torch.tensor([[-1.0, 0.0], [0.0, 0.0]]),
+            )
+        ]
+
+    def scorer(placement):
+        return {
+            "proxy_cost": float(placement[0, 0]),
+            "wirelength_cost": 0.1,
+            "density_cost": 0.2,
+            "congestion_cost": 0.3,
+            "overlap_count": 0,
+            "valid": True,
+        }
+
+    trace_path = tmp_path / "candidate_trace.jsonl"
+    result = searcher.screen_sequential_candidates(
+        benchmark=benchmark,
+        benchmark_name="synthetic",
+        baseline_placement=baseline,
+        config=searcher.SearchConfig(families=("density",), max_depth=2),
+        score_placement=scorer,
+        trace_path=trace_path,
+        candidate_generator=generator,
+    )
+
+    assert generated_from == [5.0, 3.0]
+    assert result.best_proxy == pytest.approx(2.0)
+    assert result.best_name == "depth2-best"
+    assert result.candidate_count == 3
+    assert result.best_recipe["family"] == "sequence"
+    assert [move["candidate"] for move in result.best_recipe["moves"]] == [
+        "depth1-best",
+        "depth2-best",
+    ]
+
+    records = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    accepted = [record for record in records if record["record_type"] == "accepted"]
+    assert [record["depth"] for record in accepted] == [1, 2]
+    assert accepted[-1]["hard_positions"][0] == [2.0, 5.0]
+
+
+def test_sequential_search_stops_when_a_depth_has_no_improvement(tmp_path):
+    searcher = _load_searcher()
+    benchmark = _benchmark(
+        positions=torch.tensor([[5.0, 5.0], [8.0, 8.0]]),
+        sizes=torch.tensor([[1.0, 1.0], [1.0, 1.0]]),
+        fixed=torch.tensor([False, False]),
+        num_hard=2,
+    )
+    baseline = benchmark.macro_positions.clone()
+
+    def generator(benchmark, current, config):
+        return [
+            searcher.Candidate(
+                name="worse",
+                family="synthetic",
+                recipe={"family": "synthetic"},
+                placement=current + torch.tensor([[1.0, 0.0], [0.0, 0.0]]),
+            )
+        ]
+
+    def scorer(placement):
+        return {
+            "proxy_cost": float(placement[0, 0]),
+            "wirelength_cost": 0.1,
+            "density_cost": 0.2,
+            "congestion_cost": 0.3,
+            "overlap_count": 0,
+            "valid": True,
+        }
+
+    trace_path = tmp_path / "candidate_trace.jsonl"
+    result = searcher.screen_sequential_candidates(
+        benchmark=benchmark,
+        benchmark_name="synthetic",
+        baseline_placement=baseline,
+        config=searcher.SearchConfig(families=("density",), max_depth=5),
+        score_placement=scorer,
+        trace_path=trace_path,
+        candidate_generator=generator,
+    )
+
+    assert result.best_name == "baseline"
+    assert result.best_recipe["family"] == "baseline"
+    records = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    assert records[-1]["record_type"] == "round_stop"
+    assert records[-1]["reason"] == "no_improvement"
+
+
 def test_summary_records_search_metadata_and_aggregate_best_proxy(tmp_path):
     searcher = _load_searcher()
     output_dir = tmp_path / "results" / "search-smoke"
@@ -301,7 +423,9 @@ def test_summary_records_search_metadata_and_aggregate_best_proxy(tmp_path):
         run_id="search-smoke",
         placer_path=Path("submissions/jaydenpiao/placer.py"),
         command=["search"],
-        config=searcher.SearchConfig(families=("single",), max_candidates_per_family=2),
+        config=searcher.SearchConfig(
+            families=("single",), max_candidates_per_family=2, max_depth=3
+        ),
         results=[result],
         output_dir=output_dir,
     )
@@ -314,3 +438,5 @@ def test_summary_records_search_metadata_and_aggregate_best_proxy(tmp_path):
     assert summary["benchmarks"][0]["proxy_cost"] == pytest.approx(1.5)
     assert summary["benchmarks"][0]["best_recipe"]["family"] == "single"
     assert summary["search_config"]["max_candidates_per_family"] == 2
+    assert summary["search_config"]["max_depth"] == 3
+    assert "JAYDEN_RECIPE_PROFILE" in summary["env_knobs"]

@@ -48,8 +48,13 @@ class SearchConfig:
     step_fractions: tuple[float, ...] = (0.02, 0.05, 0.1)
     max_candidates_per_benchmark: int = 128
     max_candidates_per_family: int | None = None
+    max_depth: int = 1
     legal_gap: float = 0.01
     swap_area_ratio: float = 1.5
+
+    def __post_init__(self) -> None:
+        if int(self.max_depth) < 1 or int(self.max_depth) > 5:
+            raise ValueError("max_depth must be between 1 and 5")
 
 
 @dataclass(frozen=True)
@@ -78,6 +83,7 @@ class BenchmarkSearchResult:
 
 
 ScorePlacement = Callable[[torch.Tensor], dict[str, object]]
+CandidateGenerator = Callable[[object, torch.Tensor, SearchConfig], list[Candidate]]
 
 
 def _git_output(args: list[str]) -> str:
@@ -502,6 +508,154 @@ def screen_candidates(
     )
 
 
+def screen_sequential_candidates(
+    *,
+    benchmark,
+    benchmark_name: str,
+    baseline_placement: torch.Tensor,
+    config: SearchConfig,
+    score_placement: ScorePlacement,
+    trace_path: Path | None = None,
+    candidate_generator: CandidateGenerator = generate_candidates,
+) -> BenchmarkSearchResult:
+    baseline_metrics = _normalized_metrics(score_placement(baseline_placement))
+    baseline_proxy = float(baseline_metrics["proxy_cost"])
+    current_placement = baseline_placement.detach().clone()
+    current_metrics = baseline_metrics
+    accepted_sequence: list[dict[str, object]] = []
+    candidate_count = 0
+
+    _write_trace(
+        trace_path,
+        {
+            "record_type": "baseline",
+            "benchmark": benchmark_name,
+            "candidate": "baseline",
+            "depth": 0,
+            "family": "baseline",
+            "recipe": {"family": "baseline", "benchmark": benchmark_name},
+            "metrics": baseline_metrics,
+            "delta_vs_baseline": 0.0,
+            "accepted": True,
+            "sequence": [],
+            "hard_positions": _hard_positions_record(
+                current_placement, int(benchmark.num_hard_macros)
+            ),
+        },
+    )
+
+    best_name = "baseline"
+    for depth in range(1, int(config.max_depth) + 1):
+        round_start_proxy = float(current_metrics["proxy_cost"])
+        candidates = candidate_generator(benchmark, current_placement, config)
+        candidate_count += len(candidates)
+        best_candidate: Candidate | None = None
+        best_metrics = current_metrics
+
+        for candidate in candidates:
+            metrics = _normalized_metrics(score_placement(candidate.placement))
+            proxy = float(metrics["proxy_cost"])
+            legal = int(metrics["overlap_count"]) == 0 and bool(metrics["valid"])
+            if legal and proxy < float(best_metrics["proxy_cost"]):
+                best_candidate = candidate
+                best_metrics = metrics
+            _write_trace(
+                trace_path,
+                {
+                    "record_type": "candidate",
+                    "benchmark": benchmark_name,
+                    "candidate": candidate.name,
+                    "depth": depth,
+                    "family": candidate.family,
+                    "recipe": candidate.recipe,
+                    "metrics": metrics,
+                    "delta_vs_round_start": proxy - round_start_proxy,
+                    "delta_vs_baseline": proxy - baseline_proxy,
+                    "legal": legal,
+                    "accepted": False,
+                    "sequence_before": accepted_sequence,
+                },
+            )
+
+        if best_candidate is None:
+            _write_trace(
+                trace_path,
+                {
+                    "record_type": "round_stop",
+                    "benchmark": benchmark_name,
+                    "depth": depth,
+                    "reason": "no_improvement",
+                    "metrics": current_metrics,
+                    "sequence": accepted_sequence,
+                    "hard_positions": _hard_positions_record(
+                        current_placement, int(benchmark.num_hard_macros)
+                    ),
+                },
+            )
+            break
+
+        current_placement = best_candidate.placement.detach().clone()
+        current_metrics = best_metrics
+        best_name = best_candidate.name
+        accepted_move = {
+            "depth": depth,
+            "candidate": best_candidate.name,
+            "family": best_candidate.family,
+            "recipe": best_candidate.recipe,
+            "proxy_cost": float(best_metrics["proxy_cost"]),
+        }
+        accepted_sequence.append(accepted_move)
+        _write_trace(
+            trace_path,
+            {
+                "record_type": "accepted",
+                "benchmark": benchmark_name,
+                "candidate": best_candidate.name,
+                "depth": depth,
+                "family": best_candidate.family,
+                "recipe": best_candidate.recipe,
+                "metrics": best_metrics,
+                "delta_vs_baseline": float(best_metrics["proxy_cost"]) - baseline_proxy,
+                "accepted": True,
+                "sequence": accepted_sequence,
+                "hard_positions": _hard_positions_record(
+                    current_placement, int(benchmark.num_hard_macros)
+                ),
+            },
+        )
+
+    best_recipe: dict[str, object]
+    if accepted_sequence:
+        best_recipe = {
+            "family": "sequence",
+            "benchmark": benchmark_name,
+            "moves": accepted_sequence,
+        }
+    else:
+        best_recipe = {"family": "baseline", "benchmark": benchmark_name}
+
+    return BenchmarkSearchResult(
+        name=benchmark_name,
+        baseline_proxy=baseline_proxy,
+        best_proxy=float(current_metrics["proxy_cost"]),
+        best_name=best_name,
+        best_recipe=best_recipe,
+        candidate_count=candidate_count,
+        improved=bool(accepted_sequence),
+        runtime=0.0,
+        overlaps=int(current_metrics["overlap_count"]),
+        valid=bool(current_metrics["valid"]),
+        wirelength=float(current_metrics["wirelength"]),
+        density=float(current_metrics["density"]),
+        congestion=float(current_metrics["congestion"]),
+    )
+
+
+def _hard_positions_record(placement: torch.Tensor, n_hard: int) -> list[list[float]]:
+    hard = placement[:n_hard].detach().cpu().numpy().astype(np.float64, copy=False)
+    return [[round(float(x), 6), round(float(y), 6)] for x, y in hard.tolist()]
+
+
 def _normalized_metrics(raw: dict[str, object]) -> dict[str, object]:
     return {
         "proxy_cost": float(raw["proxy_cost"]),
@@ -532,7 +686,6 @@ def run_benchmark_search(
     start = time.time()
     benchmark, plc = load_benchmark_from_dir(str(testcase_root / name))
     baseline_placement = placer.place(benchmark)
-    candidates = generate_candidates(benchmark, baseline_placement, config)
 
     def score_placement(placement: torch.Tensor) -> dict[str, object]:
         valid, violations = validate_placement(placement, benchmark)
@@ -547,13 +700,24 @@ def run_benchmark_search(
             "violations": violations,
         }
 
-    result = screen_candidates(
-        benchmark_name=name,
-        baseline_placement=baseline_placement,
-        candidates=candidates,
-        score_placement=score_placement,
-        trace_path=trace_path,
-    )
+    if int(config.max_depth) > 1:
+        result = screen_sequential_candidates(
+            benchmark=benchmark,
+            benchmark_name=name,
+            baseline_placement=baseline_placement,
+            config=config,
+            score_placement=score_placement,
+            trace_path=trace_path,
+        )
+    else:
+        candidates = generate_candidates(benchmark, baseline_placement, config)
+        result = screen_candidates(
+            benchmark_name=name,
+            baseline_placement=baseline_placement,
+            candidates=candidates,
+            score_placement=score_placement,
+            trace_path=trace_path,
+        )
     return replace(result, runtime=time.time() - start)
 
 
@@ -597,6 +761,7 @@ def write_summary(
                 "JAYDEN_TRANSFORM",
                 "JAYDEN_STRATEGY",
                 "JAYDEN_DENSITY_WEIGHT",
+                "JAYDEN_RECIPE_PROFILE",
             ]
         },
         "search_config": asdict(config),
@@ -629,6 +794,7 @@ def run(args: argparse.Namespace) -> Path:
         step_fractions=_parse_float_csv(args.step_fractions),
         max_candidates_per_benchmark=int(args.max_candidates_per_benchmark),
         max_candidates_per_family=args.max_candidates_per_family,
+        max_depth=int(args.max_depth),
         legal_gap=float(args.legal_gap),
         swap_area_ratio=float(args.swap_area_ratio),
     )
@@ -699,6 +865,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--max-candidates-per-family",
         type=int,
         help="Optional cap for each candidate family before moving to the next family.",
+    )
+    parser.add_argument(
+        "--max-depth",
+        type=int,
+        default=1,
+        help="Sequential accepted-move search depth. Must be between 1 and 5.",
     )
     parser.add_argument("--legal-gap", type=float, default=0.01)
     parser.add_argument("--swap-area-ratio", type=float, default=1.5)
