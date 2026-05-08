@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-05-06
+Last updated: 2026-05-08
 
 ## Repository
 
@@ -124,19 +124,19 @@ Previous real-benchmark smoke:
 - overlaps `0`
 - runtime `1.21s`
 
-The current implementation is a deterministic legalizer-first baseline with cheap benchmark-specific symmetry recipes behind `JAYDEN_TRANSFORM=auto`, learned benchmark-specific knob schedules behind `JAYDEN_STRATEGY=auto`, and a replayable exact-search density-rank profile behind `JAYDEN_RECIPE_PROFILE=exact_v1`. The exact-v1 profile is now the default after a local all-IBM gate beat the previous `1.4553974306` baseline with zero overlaps. Set `JAYDEN_RECIPE_PROFILE=off` for ablations.
+The current implementation is a deterministic legalizer-first baseline with cheap benchmark-specific symmetry recipes behind `JAYDEN_TRANSFORM=auto`, learned benchmark-specific knob schedules behind `JAYDEN_STRATEGY=auto`, and replayable exact-search density-rank profiles behind `JAYDEN_RECIPE_PROFILE`. The promoted default is now `exact_v2`, which applies the exact-v1 one-move density-rank recipes plus a small depth-2 follow-up sequence learned from offline exact-proxy search. Set `JAYDEN_RECIPE_PROFILE=exact_v1` or `off` for ablations.
 
 Current local all-IBM default:
 
-- command: `uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-exact-v1-default`
-- check: `uv run python scripts/check_results.py results/all-ibm-exact-v1-default/summary.json --max-runtime 3300 --max-avg-proxy 1.4553974306`
-- average proxy `1.4526220069`
+- command: `uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-exact-v2-default`
+- check: `uv run python scripts/check_results.py results/all-ibm-exact-v2-default/summary.json --max-runtime 3300 --max-avg-proxy 1.4526220069`
+- average proxy `1.4524019255`
 - total hard overlaps `0`
-- max local runtime `30.19s`
-- comparison vs `runpod-density-profile-20260501-043910`: average delta `-0.0027754245`, 3 benchmarks improved, 0 regressed
-- improved benchmarks: `ibm02 -0.010012`, `ibm06 -0.036614`, `ibm12 -0.000557`
+- max local runtime `31.08s`
+- comparison vs `all-ibm-exact-v1-default`: average delta `-0.0002200814`, 4 benchmarks improved, 0 regressed
+- improved benchmarks: `ibm02 -0.003617`, `ibm06 -0.000061`, `ibm17 -0.000033`, `ibm18 -0.000031`
 
-The previous density-aware `auto` default reproduced on RunPod Linux/GPU at `1.4553974306` with zero overlaps. The current exact-v1 default is local macOS validation only; it has not been RunPod Linux/GPU validated and is not official Docker parity.
+The previous density-aware `auto` default reproduced on RunPod Linux/GPU at `1.4553974306` with zero overlaps. The current exact-v2 default is local macOS validation only; it has not been RunPod Linux/GPU validated and is not official Docker parity.
 
 Candidate variant scans should use `scripts/scan_candidates.py` so every run produces per-variant `summary.json` files plus one aggregate `scan_summary.json` with deltas against the current baseline.
 
@@ -160,5 +160,5 @@ The 2026-05-06 weak-benchmark search artifact `results/exact-search-weak-v1-fami
 
 1. Run the official air-gapped Docker path before any leaderboard submission.
 2. Use a GPU VM or a custom verified RunPod Docker template for `scripts/run_cloud_parity.sh`; the wrapper now preflights Docker, host NVIDIA, and Docker GPU visibility before evaluating.
-3. Run multi-move exact-search sweeps on weak IBM benchmarks, starting with density-only depth 2 and scaling only when traces show material gains.
+3. Move beyond density-only depth-2 search. `results/multi-move-density-depth2-v1/summary.json` improved only `ibm02` materially, so do not spend more time scaling that exact lane unless a new move family changes the trace quality.
 4. Run NG45/OpenROAD-flow-scripts checks for finalist candidates.

@@ -553,3 +553,63 @@ Interpretation:
 
 - This is infrastructure only.
 - Use it first on weak IBM benchmarks with density-only depth 2 before adding swap or transform families.
+
+## 2026-05-08 - Exact-v2 depth-2 density profile
+
+Purpose: promote the small repeatable gains found by sequential exact-proxy density search while keeping the runtime placer coordinate-free and deterministic.
+
+Search command:
+
+```bash
+uv run python scripts/search_candidates.py \
+  --run-id multi-move-density-depth2-v1 \
+  --benchmarks ibm18,ibm17,ibm15,ibm14,ibm12,ibm06,ibm02 \
+  --families density \
+  --step-fractions 0.05,0.13,0.24,0.32 \
+  --max-candidates-per-family 8 \
+  --max-candidates-per-benchmark 96 \
+  --max-depth 2
+```
+
+Search result:
+
+- screened candidates: `88`
+- improved weak benchmarks: `4`
+- total hard overlaps: `0`
+- material gain: `ibm02 1.5495375395 -> 1.5459160805`
+- tiny gains: `ibm18 -0.000034`, `ibm17 -0.000033`, `ibm06 -0.000035`
+- no gain: `ibm15`, `ibm14`, `ibm12`
+
+Promoted recipe:
+
+- `exact_v2` first applies the exact-v1 recipes.
+- Additional learned density-rank pushes:
+  - `ibm18`: rank `1`, step `0.05`; then rank `0`, step `0.05`
+  - `ibm17`: rank `0`, step `0.24`
+  - `ibm06`: rank `1`, step `0.13`
+  - `ibm02`: rank `0`, step `0.05`; then rank `0`, step `0.05`
+- The default `JAYDEN_RECIPE_PROFILE` is now `exact_v2`; use `exact_v1` or `off` for ablations.
+
+Promotion commands:
+
+```bash
+JAYDEN_RECIPE_PROFILE=exact_v2 uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-exact-v2
+uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-exact-v2-default
+uv run python scripts/check_results.py results/all-ibm-exact-v2-default/summary.json --max-runtime 3300 --max-avg-proxy 1.4526220069
+uv run python scripts/compare_results.py results/all-ibm-exact-v1-default/summary.json results/all-ibm-exact-v2-default/summary.json
+```
+
+Aggregate result:
+
+- average proxy: `1.4524019255`
+- total hard overlaps: `0`
+- max local runtime: `31.08s`
+- comparison vs `all-ibm-exact-v1-default`: delta `-0.0002200814`
+- improved benchmarks: `ibm02`, `ibm06`, `ibm17`, `ibm18`
+- regressed benchmarks: `0`
+
+Interpretation:
+
+- This is a clean checkpoint, but not a strategic breakthrough.
+- Do not scale density-only depth 3 from this evidence: only `ibm02` moved materially.
+- Next serious scoring work should add a broader move family or soft-macro/congestion cleanup rather than more rank-step density tweaks.

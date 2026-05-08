@@ -267,7 +267,21 @@ def test_placer_reads_recipe_profile_env(monkeypatch):
     assert placer.config.recipe_profile == "exact_v1"
 
 
-def test_recipe_profile_defaults_to_exact_v1_and_off_preserves_baseline():
+def test_placer_defaults_to_promoted_recipe_profile(monkeypatch):
+    monkeypatch.delenv("JAYDEN_RECIPE_PROFILE", raising=False)
+    module_path = Path("submissions/jaydenpiao/placer.py")
+    spec = importlib.util.spec_from_file_location("default_recipe_env_placer", module_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    placer = module.JaydenPiaoPlacer()
+
+    assert placer.config.recipe_profile == "exact_v2"
+
+
+def test_recipe_profile_defaults_to_exact_v2_and_off_preserves_baseline():
     core = _load_submission_core()
     benchmark = _density_profile_benchmark("ibm06")
 
@@ -282,10 +296,17 @@ def test_recipe_profile_defaults_to_exact_v1_and_off_preserves_baseline():
         benchmark,
         core.PlacerConfig(strategy="baseline", transform="identity", recipe_profile="exact_v1"),
     )
+    exact_v2 = core.build_placement(
+        benchmark,
+        core.PlacerConfig(strategy="baseline", transform="identity", recipe_profile="exact_v2"),
+    )
 
-    assert torch.allclose(default, exact_v1)
+    assert torch.allclose(default, exact_v2)
     assert not torch.allclose(
         explicit_off[: benchmark.num_hard_macros], default[: benchmark.num_hard_macros]
+    )
+    assert not torch.allclose(
+        exact_v1[: benchmark.num_hard_macros], exact_v2[: benchmark.num_hard_macros]
     )
 
 
@@ -302,6 +323,49 @@ def test_recipe_profile_rejects_unknown_profile():
         core.build_placement(benchmark, core.PlacerConfig(recipe_profile="not-a-profile"))
 
 
+def test_exact_v2_density_profile_applies_learned_sequence(monkeypatch):
+    core = _load_submission_core()
+    benchmark = _density_profile_benchmark("ibm02")
+    calls = []
+    original_push = core._apply_density_rank_push
+
+    def recording_push(
+        hard_pos,
+        hard_sizes,
+        movable,
+        all_pos,
+        benchmark,
+        *,
+        rank,
+        step_fraction,
+        gap,
+    ):
+        calls.append((benchmark.name, int(rank), float(step_fraction)))
+        return original_push(
+            hard_pos,
+            hard_sizes,
+            movable,
+            all_pos,
+            benchmark,
+            rank=rank,
+            step_fraction=step_fraction,
+            gap=gap,
+        )
+
+    monkeypatch.setattr(core, "_apply_density_rank_push", recording_push)
+
+    core.build_placement(
+        benchmark,
+        core.PlacerConfig(strategy="baseline", transform="identity", recipe_profile="exact_v2"),
+    )
+
+    assert calls == [
+        ("ibm02", 1, pytest.approx(0.13)),
+        ("ibm02", 0, pytest.approx(0.05)),
+        ("ibm02", 0, pytest.approx(0.05)),
+    ]
+
+
 def test_exact_v1_density_profile_is_deterministic_and_legal():
     core = _load_submission_core()
     benchmark = _density_profile_benchmark("ibm06")
@@ -314,6 +378,20 @@ def test_exact_v1_density_profile_is_deterministic_and_legal():
     assert torch.allclose(first, second)
     assert first[0, 0] == pytest.approx(6.2)
     assert first[0, 1] == pytest.approx(2.5)
+    assert overlaps["overlap_count"] == 0
+
+
+def test_exact_v2_density_profile_is_deterministic_and_legal():
+    core = _load_submission_core()
+    benchmark = _density_profile_benchmark("ibm02")
+
+    config = core.PlacerConfig(strategy="baseline", transform="identity", recipe_profile="exact_v2")
+    first = core.build_placement(benchmark, config)
+    second = core.build_placement(benchmark, config)
+    overlaps = compute_overlap_metrics(first, benchmark)
+
+    assert torch.allclose(first, second)
+    assert not torch.allclose(first, benchmark.macro_positions)
     assert overlaps["overlap_count"] == 0
 
 
@@ -339,6 +417,20 @@ def test_exact_v1_density_profile_preserves_fixed_hard_macros():
     placement = core.build_placement(
         benchmark,
         core.PlacerConfig(strategy="baseline", transform="identity", recipe_profile="exact_v1"),
+    )
+    overlaps = compute_overlap_metrics(placement, benchmark)
+
+    assert torch.equal(placement[0], benchmark.macro_positions[0])
+    assert overlaps["overlap_count"] == 0
+
+
+def test_exact_v2_density_profile_preserves_fixed_hard_macros():
+    core = _load_submission_core()
+    benchmark = _density_profile_benchmark("ibm06", fixed=[True, False, False, False, False])
+
+    placement = core.build_placement(
+        benchmark,
+        core.PlacerConfig(strategy="baseline", transform="identity", recipe_profile="exact_v2"),
     )
     overlaps = compute_overlap_metrics(placement, benchmark)
 

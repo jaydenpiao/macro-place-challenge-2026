@@ -15,7 +15,7 @@ from macro_place.benchmark import Benchmark
 DEFAULT_SEARCH_ITERS = 0
 DEFAULT_LEGAL_GAP = 0.01
 DEFAULT_DENSITY_WEIGHT = 0.0
-DEFAULT_RECIPE_PROFILE = "exact_v1"
+DEFAULT_RECIPE_PROFILE = "exact_v2"
 
 
 @dataclass(frozen=True)
@@ -60,9 +60,17 @@ AUTO_STRATEGY_PROFILES = {
 
 
 EXACT_V1_DENSITY_PROFILE = {
-    "ibm06": {"rank": 0, "step_fraction": 0.32},
-    "ibm12": {"rank": 0, "step_fraction": 0.13},
-    "ibm02": {"rank": 1, "step_fraction": 0.13},
+    "ibm06": [{"rank": 0, "step_fraction": 0.32}],
+    "ibm12": [{"rank": 0, "step_fraction": 0.13}],
+    "ibm02": [{"rank": 1, "step_fraction": 0.13}],
+}
+
+
+EXACT_V2_DENSITY_PROFILE = {
+    "ibm18": [{"rank": 1, "step_fraction": 0.05}, {"rank": 0, "step_fraction": 0.05}],
+    "ibm17": [{"rank": 0, "step_fraction": 0.24}],
+    "ibm06": [{"rank": 1, "step_fraction": 0.13}],
+    "ibm02": [{"rank": 0, "step_fraction": 0.05}, {"rank": 0, "step_fraction": 0.05}],
 }
 
 
@@ -197,8 +205,8 @@ def _resolve_recipe_profile(profile: str) -> str:
     normalized = profile.strip().lower() if profile else DEFAULT_RECIPE_PROFILE
     if normalized in {"off", "none", "baseline"}:
         return "off"
-    if normalized == "exact_v1":
-        return "exact_v1"
+    if normalized in {"exact_v1", "exact_v2"}:
+        return normalized
     raise ValueError(f"unsupported recipe profile: {profile}")
 
 
@@ -214,22 +222,48 @@ def _apply_recipe_profile(
 ) -> np.ndarray:
     if profile == "off":
         return hard_pos
-    if profile != "exact_v1":  # pragma: no cover - guarded by _resolve_recipe_profile
+    recipes = list(EXACT_V1_DENSITY_PROFILE.get(benchmark.name, ()))
+    if profile == "exact_v2":
+        recipes.extend(EXACT_V2_DENSITY_PROFILE.get(benchmark.name, ()))
+    elif profile != "exact_v1":  # pragma: no cover - guarded by _resolve_recipe_profile
         raise ValueError(f"unsupported recipe profile: {profile}")
 
-    recipe = EXACT_V1_DENSITY_PROFILE.get(benchmark.name)
-    if recipe is None:
-        return hard_pos
-    return _apply_density_rank_push(
+    return _apply_density_rank_sequence(
         hard_pos,
         hard_sizes,
         movable,
         all_pos,
         benchmark,
-        rank=int(recipe["rank"]),
-        step_fraction=float(recipe["step_fraction"]),
+        recipes,
         gap=gap,
     )
+
+
+def _apply_density_rank_sequence(
+    hard_pos: np.ndarray,
+    hard_sizes: np.ndarray,
+    movable: np.ndarray,
+    all_pos: np.ndarray,
+    benchmark: Benchmark,
+    recipes: Iterable[dict[str, float | int]],
+    *,
+    gap: float,
+) -> np.ndarray:
+    current_hard = hard_pos
+    current_all = all_pos.copy()
+    for recipe in recipes:
+        current_all[: current_hard.shape[0]] = current_hard
+        current_hard = _apply_density_rank_push(
+            current_hard,
+            hard_sizes,
+            movable,
+            current_all,
+            benchmark,
+            rank=int(recipe["rank"]),
+            step_fraction=float(recipe["step_fraction"]),
+            gap=gap,
+        )
+    return current_hard
 
 
 def _apply_density_rank_push(
