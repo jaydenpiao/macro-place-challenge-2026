@@ -14,7 +14,7 @@ _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
-from core import PlacerConfig, build_placement  # noqa: E402
+from core import DEFAULT_RECIPE_PROFILE, PlacerConfig, build_placement  # noqa: E402
 
 
 def _env_int(name: str, default: int) -> int:
@@ -67,7 +67,7 @@ class JaydenPiaoPlacer:
             recipe_profile=(
                 recipe_profile
                 if recipe_profile is not None
-                else _env_str("JAYDEN_RECIPE_PROFILE", "exact_v1")
+                else _env_str("JAYDEN_RECIPE_PROFILE", DEFAULT_RECIPE_PROFILE)
             ),
         )
 
