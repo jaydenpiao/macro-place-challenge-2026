@@ -14,7 +14,8 @@ _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
-from core import DEFAULT_RECIPE_PROFILE, PlacerConfig, build_placement  # noqa: E402
+from core import DEFAULT_RECIPE_PROFILE, DEFAULT_SOFT_PROFILE  # noqa: E402
+from core import PlacerConfig, build_placement  # noqa: E402
 
 
 def _env_int(name: str, default: int) -> int:
@@ -50,6 +51,7 @@ class JaydenPiaoPlacer:
         strategy: str | None = None,
         density_weight: float | None = None,
         recipe_profile: str | None = None,
+        soft_profile: str | None = None,
     ) -> None:
         self.config = PlacerConfig(
             seed=seed if seed is not None else _env_int("JAYDEN_PLACER_SEED", 20260429),
@@ -68,6 +70,11 @@ class JaydenPiaoPlacer:
                 recipe_profile
                 if recipe_profile is not None
                 else _env_str("JAYDEN_RECIPE_PROFILE", DEFAULT_RECIPE_PROFILE)
+            ),
+            soft_profile=(
+                soft_profile
+                if soft_profile is not None
+                else _env_str("JAYDEN_SOFT_PROFILE", DEFAULT_SOFT_PROFILE)
             ),
         )
 

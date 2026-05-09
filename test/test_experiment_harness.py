@@ -52,6 +52,7 @@ def _sample_summary(**overrides):
 
 def test_build_summary_records_aggregate_metrics(monkeypatch):
     monkeypatch.setenv("JAYDEN_DENSITY_WEIGHT", "1000")
+    monkeypatch.setenv("JAYDEN_SOFT_PROFILE", "soft_v1")
     run_experiment = _load_script("scripts/run_experiment.py")
     summary = run_experiment.build_summary(
         run_id="unit",
@@ -86,6 +87,7 @@ def test_build_summary_records_aggregate_metrics(monkeypatch):
     assert summary["aggregate"]["total_overlaps"] == 0
     assert summary["aggregate"]["max_runtime"] == 2.5
     assert summary["env_knobs"]["JAYDEN_DENSITY_WEIGHT"] == "1000"
+    assert summary["env_knobs"]["JAYDEN_SOFT_PROFILE"] == "soft_v1"
     assert len(summary["benchmarks"]) == 2
 
 

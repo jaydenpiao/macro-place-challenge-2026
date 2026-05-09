@@ -649,3 +649,56 @@ Interpretation:
 - This is infrastructure only.
 - Run `soft-search-smoke` first, then `soft-search-weak-v1`.
 - Promote a runtime `JAYDEN_SOFT_PROFILE` only if weak-benchmark search finds at least two improvements of `>=0.002` and full all-IBM beats `1.4524019255`.
+
+## 2026-05-09 - Soft-v1 runtime profile
+
+Purpose: promote deterministic, coordinate-free soft-macro cleanup recipes learned from offline exact-proxy search.
+
+Weak-search evidence:
+
+```bash
+uv run python scripts/search_candidates.py \
+  --run-id soft-search-weak-v1 \
+  --benchmarks ibm18,ibm17,ibm15,ibm14,ibm12,ibm06,ibm02 \
+  --families soft_density,soft_net_pull,soft_relax \
+  --step-fractions 0.02,0.05,0.10,0.18 \
+  --max-candidates-per-family 8 \
+  --max-candidates-per-benchmark 96 \
+  --max-depth 2
+```
+
+The sweep was stopped after it had accepted improvements on `ibm18`, `ibm17`, `ibm15`, `ibm14`, and `ibm12`, because large-design exact screening was taking hours per benchmark and the promotion gate was already met.
+
+Accepted trace recipes:
+
+- `ibm18`: `soft_density` macro `627` step `0.02`, then macro `546` step `0.18`
+- `ibm17`: `soft_relax` macro `2379` step `0.10`, then `soft_net_pull` macro `1978` step `0.18`
+- `ibm15`: `soft_density` macro `506` step `0.18`, then macro `704` step `0.02`
+- `ibm14`: `soft_relax` macro `1848` step `0.05`, then `soft_density` macro `1889` step `0.02`
+- `ibm12`: `soft_net_pull` macro `823` step `0.18`
+
+The runtime implementation recomputes dense bins, net centroids, and crowding vectors from the current placement; it does not replay final coordinates.
+
+Promotion commands:
+
+```bash
+JAYDEN_SOFT_PROFILE=soft_v1 uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-soft-v1
+uv run python scripts/check_results.py results/all-ibm-soft-v1/summary.json --max-runtime 3300 --max-avg-proxy 1.4524019255
+uv run python scripts/compare_results.py results/all-ibm-exact-v2-default/summary.json results/all-ibm-soft-v1/summary.json
+uv run python scripts/run_experiment.py --placer submissions/jaydenpiao/placer.py --all --run-id all-ibm-soft-v1-default
+```
+
+Aggregate result:
+
+- average proxy: `1.4517138565`
+- total hard overlaps: `0`
+- max local runtime: `29.52s`
+- comparison vs `all-ibm-exact-v2-default`: delta `-0.0006880699`
+- improved benchmarks: `ibm12`, `ibm14`, `ibm15`, `ibm17`, `ibm18`
+- regressed benchmarks: `0`
+
+Interpretation:
+
+- `JAYDEN_SOFT_PROFILE=soft_v1` is now the default.
+- This is a clean checkpoint but still not leaderboard-competitive.
+- Next scoring lane should be hard-macro beam/LNS or analytical placement, not another one-move soft sweep.
