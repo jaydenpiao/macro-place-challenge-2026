@@ -140,15 +140,16 @@ The previous density-aware `auto` default reproduced on RunPod Linux/GPU at `1.4
 
 Candidate variant scans should use `scripts/scan_candidates.py` so every run produces per-variant `summary.json` files plus one aggregate `scan_summary.json` with deltas against the current baseline.
 
-Structural candidate searches should use `scripts/search_candidates.py`. This is an offline exact-proxy-screened lane that starts from the current placer output, generates legal hard-macro move candidates, writes `results/<run-id>/summary.json`, and records deterministic candidate recipes in `results/<run-id>/candidate_trace.jsonl`. It does not change default submission behavior.
+Structural candidate searches should use `scripts/search_candidates.py`. This is an offline exact-proxy-screened lane that starts from the current placer output, generates legal hard-macro and soft-macro move candidates, writes `results/<run-id>/summary.json`, and records deterministic candidate recipes in `results/<run-id>/candidate_trace.jsonl`. It does not change default submission behavior.
 
-Use `--max-candidates-per-family` on broad weak-benchmark sweeps so one move family cannot consume the whole benchmark candidate budget before density, swap, or transform probes run. Use `--max-depth 2..5` for sequential accepted-move search; every depth recomputes candidates from the best accepted placement, records accepted intermediate hard-macro placements in `candidate_trace.jsonl`, and leaves default submission behavior unchanged.
+Use `--max-candidates-per-family` on broad weak-benchmark sweeps so one move family cannot consume the whole benchmark candidate budget before density, swap, transform, or soft-macro probes run. Use `--max-depth 2..5` for sequential accepted-move search; every depth recomputes candidates from the best accepted placement, records accepted intermediate hard/soft macro placements in `candidate_trace.jsonl`, and leaves default submission behavior unchanged.
 
 Example smoke:
 
 ```bash
 uv run python scripts/search_candidates.py --run-id exact-search-smoke --benchmarks ibm01 --families single --step-fractions 0.02 --max-candidates-per-benchmark 4
 uv run python scripts/search_candidates.py --run-id exact-search-depth2-smoke --benchmarks ibm01 --families density --step-fractions 0.02 --max-candidates-per-benchmark 4 --max-depth 2
+uv run python scripts/search_candidates.py --run-id soft-search-smoke --benchmarks ibm01 --families soft_density,soft_net_pull,soft_relax --step-fractions 0.02,0.05 --max-candidates-per-family 4 --max-candidates-per-benchmark 12
 uv run python scripts/check_results.py results/exact-search-smoke/summary.json --max-runtime 3300 --max-avg-proxy 1.5
 ```
 

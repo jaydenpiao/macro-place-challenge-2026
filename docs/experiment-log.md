@@ -613,3 +613,39 @@ Interpretation:
 - This is a clean checkpoint, but not a strategic breakthrough.
 - Do not scale density-only depth 3 from this evidence: only `ibm02` moved materially.
 - Next serious scoring work should add a broader move family or soft-macro/congestion cleanup rather than more rank-step density tweaks.
+
+## 2026-05-09 - Soft-macro exact-search harness
+
+Purpose: add soft-macro candidate families to the offline exact-proxy search lane without changing default submission behavior.
+
+Implementation:
+
+- `scripts/search_candidates.py` now accepts `soft_density`, `soft_net_pull`, and `soft_relax` in `--families`.
+- Soft candidates move only movable soft macros; hard macros and fixed macros are preserved.
+- Candidate construction clamps moved soft macros to the canvas, rejects invalid placements, and keeps hard-overlap count at zero.
+- Sequential traces now include accepted soft positions alongside hard positions for replay/debugging.
+- No runtime placer behavior changed.
+
+Validation:
+
+```bash
+uv run --extra dev pytest test/test_exact_candidate_search.py
+uv run --extra dev black --check scripts/search_candidates.py test/test_exact_candidate_search.py
+uv run --extra dev flake8 scripts/search_candidates.py test/test_exact_candidate_search.py
+uv run python scripts/search_candidates.py --run-id soft-search-smoke --benchmarks ibm01 --families soft_density,soft_net_pull,soft_relax --step-fractions 0.02,0.05 --max-candidates-per-family 4 --max-candidates-per-benchmark 12
+```
+
+Smoke result:
+
+- `ibm01` baseline proxy: `1.0381286144`
+- best screened proxy: `1.0373603106`
+- selected candidate: `soft-density-m1005-0.02`
+- candidate count: `12`
+- total hard overlaps: `0`
+- runtime: `22.21s`
+
+Interpretation:
+
+- This is infrastructure only.
+- Run `soft-search-smoke` first, then `soft-search-weak-v1`.
+- Promote a runtime `JAYDEN_SOFT_PROFILE` only if weak-benchmark search finds at least two improvements of `>=0.002` and full all-IBM beats `1.4524019255`.
