@@ -16,6 +16,7 @@ DEFAULT_SEARCH_ITERS = 0
 DEFAULT_LEGAL_GAP = 0.01
 DEFAULT_DENSITY_WEIGHT = 0.0
 DEFAULT_RECIPE_PROFILE = "exact_v2"
+DEFAULT_SOFT_PROFILE = "soft_v1"
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class PlacerConfig:
     strategy: str = "auto"
     density_weight: float = DEFAULT_DENSITY_WEIGHT
     recipe_profile: str = DEFAULT_RECIPE_PROFILE
+    soft_profile: str = DEFAULT_SOFT_PROFILE
 
 
 AUTO_TRANSFORMS = {
@@ -74,12 +76,36 @@ EXACT_V2_DENSITY_PROFILE = {
 }
 
 
+SOFT_V1_PROFILE = {
+    "ibm18": [
+        {"family": "soft_density", "macro_index": 627, "step_fraction": 0.02},
+        {"family": "soft_density", "macro_index": 546, "step_fraction": 0.18},
+    ],
+    "ibm17": [
+        {"family": "soft_relax", "macro_index": 2379, "step_fraction": 0.10},
+        {"family": "soft_net_pull", "macro_index": 1978, "step_fraction": 0.18},
+    ],
+    "ibm15": [
+        {"family": "soft_density", "macro_index": 506, "step_fraction": 0.18},
+        {"family": "soft_density", "macro_index": 704, "step_fraction": 0.02},
+    ],
+    "ibm14": [
+        {"family": "soft_relax", "macro_index": 1848, "step_fraction": 0.05},
+        {"family": "soft_density", "macro_index": 1889, "step_fraction": 0.02},
+    ],
+    "ibm12": [
+        {"family": "soft_net_pull", "macro_index": 823, "step_fraction": 0.18},
+    ],
+}
+
+
 def build_placement(benchmark: Benchmark, config: PlacerConfig | None = None) -> torch.Tensor:
     """Return a legal deterministic placement for the challenge evaluator."""
     if config is None:
         config = PlacerConfig()
     config = effective_config_for_benchmark(benchmark, config)
     recipe_profile = _resolve_recipe_profile(config.recipe_profile)
+    soft_profile = _resolve_soft_profile(config.soft_profile)
 
     placement = _initial_placement(benchmark, config.transform)
     n_hard = int(benchmark.num_hard_macros)
@@ -94,6 +120,7 @@ def build_placement(benchmark: Benchmark, config: PlacerConfig | None = None) ->
             float(benchmark.canvas_width),
             float(benchmark.canvas_height),
         )
+        all_pos = _apply_soft_profile(all_pos, benchmark, soft_profile)
         return torch.tensor(all_pos, dtype=placement.dtype)
 
     hard_pos = placement[:n_hard].detach().cpu().numpy().astype(np.float64, copy=True)
@@ -166,6 +193,7 @@ def build_placement(benchmark: Benchmark, config: PlacerConfig | None = None) ->
         float(benchmark.canvas_width),
         float(benchmark.canvas_height),
     )
+    all_pos = _apply_soft_profile(all_pos, benchmark, soft_profile)
 
     return torch.tensor(all_pos, dtype=placement.dtype)
 
@@ -208,6 +236,15 @@ def _resolve_recipe_profile(profile: str) -> str:
     if normalized in {"exact_v1", "exact_v2"}:
         return normalized
     raise ValueError(f"unsupported recipe profile: {profile}")
+
+
+def _resolve_soft_profile(profile: str) -> str:
+    normalized = profile.strip().lower() if profile else DEFAULT_SOFT_PROFILE
+    if normalized in {"off", "none", "baseline"}:
+        return "off"
+    if normalized == "soft_v1":
+        return normalized
+    raise ValueError(f"unsupported soft profile: {profile}")
 
 
 def _apply_recipe_profile(
@@ -361,6 +398,154 @@ def _densest_bin_center_from_positions(benchmark: Benchmark, positions: np.ndarr
 
     row, col = np.unravel_index(int(np.argmax(grid)), grid.shape)
     return np.array([(col + 0.5) * bin_w, (row + 0.5) * bin_h], dtype=np.float64)
+
+
+def _apply_soft_profile(
+    all_pos: np.ndarray,
+    benchmark: Benchmark,
+    profile: str,
+) -> np.ndarray:
+    if profile == "off":
+        return all_pos
+    if profile != "soft_v1":  # pragma: no cover - guarded by _resolve_soft_profile
+        raise ValueError(f"unsupported soft profile: {profile}")
+
+    current = all_pos.copy()
+    for recipe in SOFT_V1_PROFILE.get(benchmark.name, ()):
+        current = _apply_soft_recipe(current, benchmark, recipe)
+    return current
+
+
+def _apply_soft_recipe(
+    all_pos: np.ndarray,
+    benchmark: Benchmark,
+    recipe: dict[str, float | int | str],
+) -> np.ndarray:
+    idx = int(recipe["macro_index"])
+    if not _is_movable_soft_macro(idx, benchmark):
+        return all_pos
+
+    family = str(recipe["family"])
+    step_fraction = float(recipe["step_fraction"])
+    if step_fraction <= 0.0:
+        return all_pos
+
+    if family == "soft_density":
+        dense_point = _densest_bin_center_from_positions(benchmark, all_pos)
+        vector = all_pos[idx] - dense_point
+        unit = _unit_vector(vector, all_pos[idx], benchmark)
+        step = max(float(benchmark.canvas_width), float(benchmark.canvas_height)) * step_fraction
+        proposed = all_pos[idx] + unit * step
+    elif family == "soft_net_pull":
+        centroid = _connected_centroid_from_full(idx, all_pos, benchmark)
+        if centroid is None:
+            return all_pos
+        proposed = all_pos[idx] + step_fraction * (centroid - all_pos[idx])
+    elif family == "soft_relax":
+        vector, _crowd_point, score = _soft_crowding_vector(idx, all_pos, benchmark)
+        if score <= 0.0 or float(np.linalg.norm(vector)) <= 1.0e-9:
+            return all_pos
+        unit = vector / max(float(np.linalg.norm(vector)), 1.0e-12)
+        step = max(float(benchmark.canvas_width), float(benchmark.canvas_height)) * step_fraction
+        proposed = all_pos[idx] + unit * step
+    else:
+        raise ValueError(f"unsupported soft recipe family: {family}")
+
+    candidate = all_pos.copy()
+    candidate[idx] = proposed
+    fixed = benchmark.macro_fixed.detach().cpu().numpy().astype(bool, copy=False)
+    movable_soft = np.zeros(int(benchmark.num_macros), dtype=bool)
+    movable_soft[int(benchmark.num_hard_macros) :] = ~fixed[int(benchmark.num_hard_macros) :]
+    candidate[: int(benchmark.num_hard_macros)] = all_pos[: int(benchmark.num_hard_macros)]
+    candidate[~movable_soft] = all_pos[~movable_soft]
+    _clamp_movable_to_canvas(
+        candidate,
+        benchmark.macro_sizes.detach().cpu().numpy().astype(np.float64, copy=False),
+        movable_soft,
+        float(benchmark.canvas_width),
+        float(benchmark.canvas_height),
+    )
+    return candidate
+
+
+def _is_movable_soft_macro(idx: int, benchmark: Benchmark) -> bool:
+    if idx < int(benchmark.num_hard_macros) or idx >= int(benchmark.num_macros):
+        return False
+    return not bool(benchmark.macro_fixed[idx].item())
+
+
+def _unit_vector(vector: np.ndarray, center: np.ndarray, benchmark: Benchmark) -> np.ndarray:
+    norm = float(np.linalg.norm(vector))
+    if norm <= 1.0e-9:
+        vector = center - np.array(
+            [float(benchmark.canvas_width) / 2.0, float(benchmark.canvas_height) / 2.0],
+            dtype=np.float64,
+        )
+        norm = float(np.linalg.norm(vector))
+    if norm <= 1.0e-9:
+        vector = np.array([1.0, 0.0], dtype=np.float64)
+        norm = 1.0
+    return vector / norm
+
+
+def _connected_centroid_from_full(
+    idx: int,
+    all_pos: np.ndarray,
+    benchmark: Benchmark,
+) -> np.ndarray | None:
+    points: list[np.ndarray] = []
+    for nodes in benchmark.net_nodes:
+        owners = [int(owner) for owner in nodes.tolist()]
+        if idx not in owners:
+            continue
+        for owner in owners:
+            if owner != idx:
+                points.append(_owner_position_from_full(owner, all_pos, benchmark))
+    if not points:
+        return None
+    return np.mean(np.asarray(points, dtype=np.float64), axis=0)
+
+
+def _owner_position_from_full(
+    owner: int,
+    all_pos: np.ndarray,
+    benchmark: Benchmark,
+) -> np.ndarray:
+    if 0 <= owner < int(benchmark.num_macros):
+        return all_pos[owner]
+    port_idx = owner - int(benchmark.num_macros)
+    if hasattr(benchmark, "port_positions") and 0 <= port_idx < benchmark.port_positions.shape[0]:
+        return benchmark.port_positions[port_idx].detach().cpu().numpy().astype(np.float64)
+    return np.zeros(2, dtype=np.float64)
+
+
+def _soft_crowding_vector(
+    idx: int,
+    all_pos: np.ndarray,
+    benchmark: Benchmark,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    sizes = benchmark.macro_sizes.detach().cpu().numpy().astype(np.float64, copy=False)
+    origin = all_pos[idx]
+    vector = np.zeros(2, dtype=np.float64)
+    weighted_point = np.zeros(2, dtype=np.float64)
+    total_weight = 0.0
+    for other in range(int(benchmark.num_macros)):
+        if other == idx:
+            continue
+        delta = origin - all_pos[other]
+        distance = float(np.linalg.norm(delta))
+        if distance <= 1.0e-9:
+            angle = (idx + 1) * (other + 3)
+            delta = np.array([math.cos(angle), math.sin(angle)], dtype=np.float64)
+            distance = 1.0
+        area = max(float(sizes[other, 0] * sizes[other, 1]), 1.0e-12)
+        weight = area / max(distance * distance, 1.0e-6)
+        vector += (delta / distance) * weight
+        weighted_point += all_pos[other] * weight
+        total_weight += weight
+    if total_weight <= 0.0:
+        return vector, origin.copy(), 0.0
+    return vector, weighted_point / total_weight, total_weight
 
 
 def _initial_placement(benchmark: Benchmark, transform: str) -> torch.Tensor:

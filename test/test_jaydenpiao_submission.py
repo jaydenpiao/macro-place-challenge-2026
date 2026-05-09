@@ -68,6 +68,36 @@ def _density_profile_benchmark(name: str, fixed: list[bool] | None = None) -> Be
     return benchmark
 
 
+def _soft_profile_benchmark(name: str, fixed: list[bool] | None = None) -> Benchmark:
+    benchmark = _benchmark(
+        positions=torch.tensor(
+            [
+                [2.0, 2.0],
+                [4.5, 4.5],
+                [4.7, 4.5],
+                [8.0, 8.0],
+            ]
+        ),
+        sizes=torch.tensor(
+            [
+                [1.0, 1.0],
+                [1.0, 1.0],
+                [1.0, 1.0],
+                [1.0, 1.0],
+            ]
+        ),
+        fixed=torch.tensor(fixed or [False, False, False, False]),
+        num_hard=1,
+    )
+    benchmark.name = name
+    benchmark.grid_rows = 2
+    benchmark.grid_cols = 2
+    benchmark.num_nets = 1
+    benchmark.net_nodes = [torch.tensor([1, 3])]
+    benchmark.net_weights = torch.tensor([1.0])
+    return benchmark
+
+
 def _load_submission_core():
     path = Path("submissions/jaydenpiao/core.py")
     spec = importlib.util.spec_from_file_location("jaydenpiao_core", path)
@@ -267,8 +297,23 @@ def test_placer_reads_recipe_profile_env(monkeypatch):
     assert placer.config.recipe_profile == "exact_v1"
 
 
+def test_placer_reads_soft_profile_env(monkeypatch):
+    monkeypatch.setenv("JAYDEN_SOFT_PROFILE", "soft_v1")
+    module_path = Path("submissions/jaydenpiao/placer.py")
+    spec = importlib.util.spec_from_file_location("soft_env_placer", module_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    placer = module.JaydenPiaoPlacer()
+
+    assert placer.config.soft_profile == "soft_v1"
+
+
 def test_placer_defaults_to_promoted_recipe_profile(monkeypatch):
     monkeypatch.delenv("JAYDEN_RECIPE_PROFILE", raising=False)
+    monkeypatch.delenv("JAYDEN_SOFT_PROFILE", raising=False)
     module_path = Path("submissions/jaydenpiao/placer.py")
     spec = importlib.util.spec_from_file_location("default_recipe_env_placer", module_path)
     module = importlib.util.module_from_spec(spec)
@@ -279,6 +324,31 @@ def test_placer_defaults_to_promoted_recipe_profile(monkeypatch):
     placer = module.JaydenPiaoPlacer()
 
     assert placer.config.recipe_profile == "exact_v2"
+    assert placer.config.soft_profile == "soft_v1"
+
+
+def test_soft_profile_defaults_to_soft_v1_and_off_preserves_baseline():
+    core = _load_submission_core()
+    benchmark = _soft_profile_benchmark("ibm18")
+    core.SOFT_V1_PROFILE = {
+        "ibm18": [{"family": "soft_density", "macro_index": 1, "step_fraction": 0.05}]
+    }
+
+    default = core.build_placement(
+        benchmark, core.PlacerConfig(strategy="baseline", transform="identity")
+    )
+    explicit_off = core.build_placement(
+        benchmark,
+        core.PlacerConfig(strategy="baseline", transform="identity", soft_profile="off"),
+    )
+    soft_v1 = core.build_placement(
+        benchmark,
+        core.PlacerConfig(strategy="baseline", transform="identity", soft_profile="soft_v1"),
+    )
+
+    assert torch.allclose(default, soft_v1)
+    assert not torch.allclose(default[benchmark.num_hard_macros :], explicit_off[1:])
+    assert torch.equal(soft_v1[0], explicit_off[0])
 
 
 def test_recipe_profile_defaults_to_exact_v2_and_off_preserves_baseline():
@@ -321,6 +391,70 @@ def test_recipe_profile_rejects_unknown_profile():
 
     with pytest.raises(ValueError, match="unsupported recipe profile"):
         core.build_placement(benchmark, core.PlacerConfig(recipe_profile="not-a-profile"))
+
+
+def test_soft_profile_rejects_unknown_profile():
+    core = _load_submission_core()
+    benchmark = _soft_profile_benchmark("ibm18")
+
+    with pytest.raises(ValueError, match="unsupported soft profile"):
+        core.build_placement(benchmark, core.PlacerConfig(soft_profile="not-a-profile"))
+
+
+def test_soft_v1_profile_applies_learned_sequence(monkeypatch):
+    core = _load_submission_core()
+    benchmark = _soft_profile_benchmark("ibm18")
+    core.SOFT_V1_PROFILE = {
+        "ibm18": [
+            {"family": "soft_density", "macro_index": 1, "step_fraction": 0.02},
+            {"family": "soft_net_pull", "macro_index": 2, "step_fraction": 0.18},
+        ]
+    }
+    calls = []
+    original = core._apply_soft_recipe
+
+    def recording_apply(all_pos, benchmark, recipe):
+        calls.append((benchmark.name, recipe["family"], int(recipe["macro_index"])))
+        return original(all_pos, benchmark, recipe)
+
+    monkeypatch.setattr(core, "_apply_soft_recipe", recording_apply)
+
+    core.build_placement(
+        benchmark,
+        core.PlacerConfig(strategy="baseline", transform="identity", soft_profile="soft_v1"),
+    )
+
+    assert calls == [
+        ("ibm18", "soft_density", 1),
+        ("ibm18", "soft_net_pull", 2),
+    ]
+
+
+def test_soft_v1_profile_is_deterministic_preserves_hard_and_fixed_macros(monkeypatch):
+    core = _load_submission_core()
+    benchmark = _soft_profile_benchmark("ibm18", fixed=[False, False, True, False])
+    core.SOFT_V1_PROFILE = {
+        "ibm18": [
+            {"family": "soft_density", "macro_index": 1, "step_fraction": 0.05},
+            {"family": "soft_relax", "macro_index": 2, "step_fraction": 0.18},
+        ]
+    }
+    config = core.PlacerConfig(
+        strategy="baseline",
+        transform="identity",
+        recipe_profile="off",
+        soft_profile="soft_v1",
+    )
+
+    first = core.build_placement(benchmark, config)
+    second = core.build_placement(benchmark, config)
+    overlaps = compute_overlap_metrics(first, benchmark)
+
+    assert torch.allclose(first, second)
+    assert torch.equal(first[0], benchmark.macro_positions[0])
+    assert torch.equal(first[2], benchmark.macro_positions[2])
+    assert not torch.equal(first[1], benchmark.macro_positions[1])
+    assert overlaps["overlap_count"] == 0
 
 
 def test_exact_v2_density_profile_applies_learned_sequence(monkeypatch):

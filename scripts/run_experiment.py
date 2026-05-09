@@ -80,6 +80,8 @@ def build_summary(
                 "JAYDEN_TRANSFORM",
                 "JAYDEN_STRATEGY",
                 "JAYDEN_DENSITY_WEIGHT",
+                "JAYDEN_RECIPE_PROFILE",
+                "JAYDEN_SOFT_PROFILE",
             ]
         },
         "benchmarks": clean_results,
