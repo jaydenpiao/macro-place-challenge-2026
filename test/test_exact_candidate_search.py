@@ -204,6 +204,119 @@ def test_density_candidates_push_macros_away_from_dense_bin():
     assert compute_overlap_metrics(candidate.placement, benchmark)["overlap_count"] == 0
 
 
+def test_soft_density_candidates_move_only_movable_soft_macros():
+    searcher = _load_searcher()
+    benchmark = _benchmark(
+        positions=torch.tensor(
+            [
+                [2.0, 2.0],
+                [8.0, 8.0],
+                [2.1, 2.1],
+                [2.2, 2.0],
+                [7.0, 7.0],
+            ]
+        ),
+        sizes=torch.tensor(
+            [
+                [1.0, 1.0],
+                [1.0, 1.0],
+                [1.0, 1.0],
+                [1.0, 1.0],
+                [1.0, 1.0],
+            ]
+        ),
+        fixed=torch.tensor([False, False, False, True, False]),
+        num_hard=2,
+    )
+    config = searcher.SearchConfig(
+        families=("soft_density",),
+        step_fractions=(0.2,),
+        max_candidates_per_benchmark=4,
+    )
+
+    candidates = searcher.generate_candidates(benchmark, benchmark.macro_positions, config)
+
+    assert candidates
+    candidate = candidates[0]
+    moved_idx = candidate.recipe["macro_index"]
+    dense_point = torch.tensor(candidate.recipe["away_from"])
+    before = torch.linalg.vector_norm(benchmark.macro_positions[moved_idx] - dense_point)
+    after = torch.linalg.vector_norm(candidate.placement[moved_idx] - dense_point)
+
+    assert candidate.family == "soft_density"
+    assert moved_idx >= benchmark.num_hard_macros
+    assert after > before
+    assert torch.equal(
+        candidate.placement[: benchmark.num_hard_macros], benchmark.macro_positions[:2]
+    )
+    assert torch.equal(candidate.placement[3], benchmark.macro_positions[3])
+    assert searcher._placement_key(
+        candidate.placement, benchmark.num_macros
+    ) != searcher._placement_key(benchmark.macro_positions, benchmark.num_macros)
+    assert compute_overlap_metrics(candidate.placement, benchmark)["overlap_count"] == 0
+
+
+def test_soft_net_pull_candidates_move_soft_macros_toward_connected_centroid():
+    searcher = _load_searcher()
+    benchmark = _benchmark(
+        positions=torch.tensor([[8.0, 8.0], [2.0, 2.0], [2.0, 8.0]]),
+        sizes=torch.tensor([[1.0, 1.0], [1.0, 1.0], [1.0, 1.0]]),
+        fixed=torch.tensor([False, False, False]),
+        num_hard=1,
+    )
+    benchmark.net_nodes = [torch.tensor([0, 1])]
+    benchmark.num_nets = 1
+    benchmark.net_weights = torch.tensor([1.0])
+    config = searcher.SearchConfig(
+        families=("soft_net_pull",),
+        step_fractions=(0.5,),
+        max_candidates_per_benchmark=4,
+    )
+
+    candidates = searcher.generate_candidates(benchmark, benchmark.macro_positions, config)
+
+    assert candidates
+    candidate = candidates[0]
+    moved_idx = candidate.recipe["macro_index"]
+    target = torch.tensor(candidate.recipe["toward"])
+    before = torch.linalg.vector_norm(benchmark.macro_positions[moved_idx] - target)
+    after = torch.linalg.vector_norm(candidate.placement[moved_idx] - target)
+
+    assert candidate.family == "soft_net_pull"
+    assert moved_idx == 1
+    assert after < before
+    assert torch.equal(candidate.placement[0], benchmark.macro_positions[0])
+
+
+def test_soft_relax_candidates_move_soft_macros_away_from_crowding():
+    searcher = _load_searcher()
+    benchmark = _benchmark(
+        positions=torch.tensor([[2.0, 2.0], [2.2, 2.0], [2.3, 2.1], [8.0, 8.0]]),
+        sizes=torch.tensor([[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]]),
+        fixed=torch.tensor([False, False, False, False]),
+        num_hard=1,
+    )
+    config = searcher.SearchConfig(
+        families=("soft_relax",),
+        step_fractions=(0.1,),
+        max_candidates_per_benchmark=4,
+    )
+
+    candidates = searcher.generate_candidates(benchmark, benchmark.macro_positions, config)
+
+    assert candidates
+    candidate = candidates[0]
+    moved_idx = candidate.recipe["macro_index"]
+    crowd_point = torch.tensor(candidate.recipe["away_from"])
+    before = torch.linalg.vector_norm(benchmark.macro_positions[moved_idx] - crowd_point)
+    after = torch.linalg.vector_norm(candidate.placement[moved_idx] - crowd_point)
+
+    assert candidate.family == "soft_relax"
+    assert moved_idx >= benchmark.num_hard_macros
+    assert after > before
+    assert torch.equal(candidate.placement[0], benchmark.macro_positions[0])
+
+
 def test_transform_candidates_record_transform_recipe_and_preserve_fixed_macros():
     searcher = _load_searcher()
     benchmark = _benchmark(
@@ -398,6 +511,56 @@ def test_sequential_search_stops_when_a_depth_has_no_improvement(tmp_path):
     records = [json.loads(line) for line in trace_path.read_text().splitlines()]
     assert records[-1]["record_type"] == "round_stop"
     assert records[-1]["reason"] == "no_improvement"
+
+
+def test_sequential_trace_records_accepted_soft_positions(tmp_path):
+    searcher = _load_searcher()
+    benchmark = _benchmark(
+        positions=torch.tensor([[8.0, 8.0], [5.0, 5.0]]),
+        sizes=torch.tensor([[1.0, 1.0], [1.0, 1.0]]),
+        fixed=torch.tensor([False, False]),
+        num_hard=1,
+    )
+    baseline = benchmark.macro_positions.clone()
+
+    def generator(benchmark, current, config):
+        placement = current.clone()
+        placement[1, 0] -= 1.0
+        return [
+            searcher.Candidate(
+                name="soft-left",
+                family="soft_density",
+                recipe={"family": "soft_density", "benchmark": "synthetic", "macro_index": 1},
+                placement=placement,
+            )
+        ]
+
+    def scorer(placement):
+        return {
+            "proxy_cost": float(placement[1, 0]),
+            "wirelength_cost": 0.1,
+            "density_cost": 0.2,
+            "congestion_cost": 0.3,
+            "overlap_count": 0,
+            "valid": True,
+        }
+
+    trace_path = tmp_path / "candidate_trace.jsonl"
+    searcher.screen_sequential_candidates(
+        benchmark=benchmark,
+        benchmark_name="synthetic",
+        baseline_placement=baseline,
+        config=searcher.SearchConfig(families=("soft_density",), max_depth=1),
+        score_placement=scorer,
+        trace_path=trace_path,
+        candidate_generator=generator,
+    )
+
+    records = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    accepted = [record for record in records if record["record_type"] == "accepted"]
+
+    assert accepted
+    assert accepted[0]["soft_positions"] == [[4.0, 5.0]]
 
 
 def test_summary_records_search_metadata_and_aggregate_best_proxy(tmp_path):

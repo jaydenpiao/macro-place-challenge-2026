@@ -116,7 +116,15 @@ def _parse_float_csv(raw: str) -> tuple[float, ...]:
 
 def _normalize_families(families: Iterable[str]) -> tuple[str, ...]:
     normalized: list[str] = []
-    allowed = {"single", "swap", "density", "transform"}
+    allowed = {
+        "single",
+        "swap",
+        "density",
+        "transform",
+        "soft_density",
+        "soft_net_pull",
+        "soft_relax",
+    }
     for family in families:
         name = family.strip().lower()
         if not name:
@@ -156,11 +164,17 @@ def generate_candidates(
             generated = _density_push_candidates(benchmark, baseline_placement, config, remaining)
         elif family == "transform":
             generated = _transform_candidates(benchmark, baseline_placement, config, remaining)
+        elif family == "soft_density":
+            generated = _soft_density_candidates(benchmark, baseline_placement, config, remaining)
+        elif family == "soft_net_pull":
+            generated = _soft_net_pull_candidates(benchmark, baseline_placement, config, remaining)
+        elif family == "soft_relax":
+            generated = _soft_relax_candidates(benchmark, baseline_placement, config, remaining)
         else:  # pragma: no cover - guarded by _normalize_families
             generated = []
 
         for candidate in generated:
-            key = _placement_key(candidate.placement, int(benchmark.num_hard_macros))
+            key = _placement_key(candidate.placement, int(benchmark.num_macros))
             if key in seen:
                 continue
             seen.add(key)
@@ -337,6 +351,144 @@ def _transform_candidates(
     return candidates
 
 
+def _soft_density_candidates(
+    benchmark,
+    baseline: torch.Tensor,
+    config: SearchConfig,
+    limit: int,
+) -> list[Candidate]:
+    centers = baseline.detach().cpu().numpy().astype(np.float64, copy=False)
+    soft_indices = _movable_soft_indices(benchmark)
+    if not soft_indices:
+        return []
+
+    dense_point = _densest_bin_center(benchmark, baseline)
+    ranked = sorted(
+        soft_indices,
+        key=lambda idx: (float(np.linalg.norm(centers[idx] - dense_point)), int(idx)),
+    )
+    candidates: list[Candidate] = []
+    for idx in ranked[: max(1, min(8, len(ranked)))]:
+        vector = centers[idx] - dense_point
+        unit = _unit_vector(vector, centers[idx], benchmark)
+        for step_fraction in config.step_fractions:
+            full = centers.copy()
+            step = max(float(benchmark.canvas_width), float(benchmark.canvas_height)) * float(
+                step_fraction
+            )
+            full[idx] = full[idx] + unit * step
+            candidate = _make_soft_candidate(
+                benchmark,
+                baseline,
+                full,
+                family="soft_density",
+                name=f"soft-density-m{idx}-{step_fraction:g}",
+                recipe={
+                    "family": "soft_density",
+                    "benchmark": benchmark.name,
+                    "macro_index": int(idx),
+                    "step_fraction": float(step_fraction),
+                    "away_from": [float(dense_point[0]), float(dense_point[1])],
+                },
+            )
+            if candidate is not None:
+                candidates.append(candidate)
+                if len(candidates) >= limit:
+                    return candidates
+    return candidates
+
+
+def _soft_net_pull_candidates(
+    benchmark,
+    baseline: torch.Tensor,
+    config: SearchConfig,
+    limit: int,
+) -> list[Candidate]:
+    positions = baseline.detach().cpu().numpy().astype(np.float64, copy=False)
+    incident = _incident_nets_by_macro(benchmark)
+    ranked = sorted(
+        [idx for idx in _movable_soft_indices(benchmark) if incident[idx]],
+        key=lambda idx: (-len(incident[idx]), int(idx)),
+    )
+    candidates: list[Candidate] = []
+    for idx in ranked[: max(1, min(8, len(ranked)))]:
+        centroid = _connected_centroid(idx, positions, benchmark, incident[idx])
+        if centroid is None:
+            continue
+        direction = centroid - positions[idx]
+        if float(np.linalg.norm(direction)) <= 1.0e-9:
+            continue
+        for step_fraction in config.step_fractions:
+            full = positions.copy()
+            full[idx] = full[idx] + float(step_fraction) * direction
+            candidate = _make_soft_candidate(
+                benchmark,
+                baseline,
+                full,
+                family="soft_net_pull",
+                name=f"soft-net-pull-m{idx}-{step_fraction:g}",
+                recipe={
+                    "family": "soft_net_pull",
+                    "benchmark": benchmark.name,
+                    "macro_index": int(idx),
+                    "step_fraction": float(step_fraction),
+                    "toward": [float(centroid[0]), float(centroid[1])],
+                    "incident_nets": [int(net_id) for net_id in incident[idx]],
+                },
+            )
+            if candidate is not None:
+                candidates.append(candidate)
+                if len(candidates) >= limit:
+                    return candidates
+    return candidates
+
+
+def _soft_relax_candidates(
+    benchmark,
+    baseline: torch.Tensor,
+    config: SearchConfig,
+    limit: int,
+) -> list[Candidate]:
+    positions = baseline.detach().cpu().numpy().astype(np.float64, copy=False)
+    candidates: list[Candidate] = []
+    scored: list[tuple[float, int, np.ndarray, np.ndarray]] = []
+    for idx in _movable_soft_indices(benchmark):
+        vector, crowd_point, score = _soft_crowding_vector(idx, positions, benchmark)
+        if score <= 0.0 or float(np.linalg.norm(vector)) <= 1.0e-9:
+            continue
+        scored.append((-score, int(idx), vector, crowd_point))
+
+    for _negative_score, idx, vector, crowd_point in sorted(scored)[: max(1, min(8, len(scored)))]:
+        unit = vector / max(float(np.linalg.norm(vector)), 1.0e-12)
+        for step_fraction in config.step_fractions:
+            full = positions.copy()
+            step = max(float(benchmark.canvas_width), float(benchmark.canvas_height)) * float(
+                step_fraction
+            )
+            full[idx] = full[idx] + unit * step
+            candidate = _make_soft_candidate(
+                benchmark,
+                baseline,
+                full,
+                family="soft_relax",
+                name=f"soft-relax-m{idx}-{step_fraction:g}",
+                recipe={
+                    "family": "soft_relax",
+                    "benchmark": benchmark.name,
+                    "macro_index": int(idx),
+                    "step_fraction": float(step_fraction),
+                    "away_from": [float(crowd_point[0]), float(crowd_point[1])],
+                    "relax_vector": [float(unit[0]), float(unit[1])],
+                    "crowding_score": float(-_negative_score),
+                },
+            )
+            if candidate is not None:
+                candidates.append(candidate)
+                if len(candidates) >= limit:
+                    return candidates
+    return candidates
+
+
 def _make_candidate(
     benchmark,
     baseline: torch.Tensor,
@@ -381,6 +533,42 @@ def _make_candidate(
     )
 
 
+def _make_soft_candidate(
+    benchmark,
+    baseline: torch.Tensor,
+    full_positions: np.ndarray,
+    *,
+    family: str,
+    name: str,
+    recipe: dict[str, object],
+) -> Candidate | None:
+    full = full_positions.astype(np.float64, copy=True)
+    baseline_np = baseline.detach().cpu().numpy().astype(np.float64, copy=False)
+    fixed = benchmark.macro_fixed.detach().cpu().numpy().astype(bool)
+    movable = np.zeros(int(benchmark.num_macros), dtype=bool)
+    movable[_movable_soft_indices(benchmark)] = True
+
+    full[: int(benchmark.num_hard_macros)] = baseline_np[: int(benchmark.num_hard_macros)]
+    full[fixed] = baseline_np[fixed]
+    jayden_core._clamp_movable_to_canvas(
+        full,
+        benchmark.macro_sizes.detach().cpu().numpy().astype(np.float64),
+        movable,
+        float(benchmark.canvas_width),
+        float(benchmark.canvas_height),
+    )
+
+    placement = torch.tensor(full, dtype=baseline.dtype)
+    if torch.allclose(placement, baseline.detach().cpu()):
+        return None
+    if compute_overlap_metrics(placement, benchmark)["overlap_count"] != 0:
+        return None
+    valid, _violations = validate_placement(placement, benchmark)
+    if not valid:
+        return None
+    return Candidate(name=name, family=family, recipe=recipe, placement=placement)
+
+
 def _hard_positions_np(placement: torch.Tensor, benchmark) -> np.ndarray:
     return (
         placement[: benchmark.num_hard_macros].detach().cpu().numpy().astype(np.float64, copy=True)
@@ -390,6 +578,94 @@ def _hard_positions_np(placement: torch.Tensor, benchmark) -> np.ndarray:
 def _movable_hard_indices(benchmark) -> list[int]:
     fixed = benchmark.macro_fixed[: benchmark.num_hard_macros].detach().cpu().numpy().astype(bool)
     return [idx for idx, is_fixed in enumerate(fixed.tolist()) if not is_fixed]
+
+
+def _movable_soft_indices(benchmark) -> list[int]:
+    fixed = benchmark.macro_fixed.detach().cpu().numpy().astype(bool)
+    return [
+        idx
+        for idx in range(int(benchmark.num_hard_macros), int(benchmark.num_macros))
+        if not fixed[idx]
+    ]
+
+
+def _unit_vector(vector: np.ndarray, center: np.ndarray, benchmark) -> np.ndarray:
+    norm = float(np.linalg.norm(vector))
+    if norm <= 1.0e-9:
+        vector = center - np.array(
+            [float(benchmark.canvas_width) / 2.0, float(benchmark.canvas_height) / 2.0],
+            dtype=np.float64,
+        )
+        norm = float(np.linalg.norm(vector))
+    if norm <= 1.0e-9:
+        vector = np.array([1.0, 0.0], dtype=np.float64)
+        norm = 1.0
+    return vector / norm
+
+
+def _incident_nets_by_macro(benchmark) -> list[list[int]]:
+    incident: list[list[int]] = [[] for _ in range(int(benchmark.num_macros))]
+    for net_id, nodes in enumerate(benchmark.net_nodes):
+        for owner in nodes.tolist():
+            if 0 <= int(owner) < int(benchmark.num_macros):
+                incident[int(owner)].append(int(net_id))
+    return incident
+
+
+def _connected_centroid(
+    idx: int,
+    positions: np.ndarray,
+    benchmark,
+    incident_nets: Sequence[int],
+) -> np.ndarray | None:
+    points: list[np.ndarray] = []
+    for net_id in incident_nets:
+        for owner in benchmark.net_nodes[net_id].tolist():
+            owner = int(owner)
+            if owner == idx:
+                continue
+            points.append(_owner_position_from_full(owner, positions, benchmark))
+    if not points:
+        return None
+    return np.mean(np.asarray(points, dtype=np.float64), axis=0)
+
+
+def _owner_position_from_full(owner: int, positions: np.ndarray, benchmark) -> np.ndarray:
+    if 0 <= owner < int(benchmark.num_macros):
+        return positions[owner]
+    port_idx = owner - int(benchmark.num_macros)
+    if hasattr(benchmark, "port_positions") and 0 <= port_idx < benchmark.port_positions.shape[0]:
+        return benchmark.port_positions[port_idx].detach().cpu().numpy().astype(np.float64)
+    return np.zeros(2, dtype=np.float64)
+
+
+def _soft_crowding_vector(
+    idx: int,
+    positions: np.ndarray,
+    benchmark,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    sizes = benchmark.macro_sizes.detach().cpu().numpy().astype(np.float64, copy=False)
+    origin = positions[idx]
+    vector = np.zeros(2, dtype=np.float64)
+    weighted_point = np.zeros(2, dtype=np.float64)
+    total_weight = 0.0
+    for other in range(int(benchmark.num_macros)):
+        if other == idx:
+            continue
+        delta = origin - positions[other]
+        distance = float(np.linalg.norm(delta))
+        if distance <= 1.0e-9:
+            angle = (idx + 1) * (other + 3)
+            delta = np.array([math.cos(angle), math.sin(angle)], dtype=np.float64)
+            distance = 1.0
+        area = max(float(sizes[other, 0] * sizes[other, 1]), 1.0e-12)
+        weight = area / max(distance * distance, 1.0e-6)
+        vector += (delta / distance) * weight
+        weighted_point += positions[other] * weight
+        total_weight += weight
+    if total_weight <= 0.0:
+        return vector, origin.copy(), 0.0
+    return vector, weighted_point / total_weight, total_weight
 
 
 def _similar_size(lhs: np.ndarray, rhs: np.ndarray, *, max_area_ratio: float) -> bool:
@@ -438,13 +714,14 @@ def _densest_bin_center(benchmark, placement: torch.Tensor) -> np.ndarray:
     return np.array([(col + 0.5) * bin_w, (row + 0.5) * bin_h], dtype=np.float64)
 
 
-def _placement_key(placement: torch.Tensor, n_hard: int) -> tuple[float, ...]:
-    rounded = torch.round(placement[:n_hard].detach().cpu() * 1000.0) / 1000.0
+def _placement_key(placement: torch.Tensor, n_positions: int) -> tuple[float, ...]:
+    rounded = torch.round(placement[:n_positions].detach().cpu() * 1000.0) / 1000.0
     return tuple(float(value) for value in rounded.reshape(-1).tolist())
 
 
 def screen_candidates(
     *,
+    benchmark=None,
     benchmark_name: str,
     baseline_placement: torch.Tensor,
     candidates: Sequence[Candidate],
@@ -457,17 +734,19 @@ def screen_candidates(
     best_recipe: dict[str, object] = {"family": "baseline", "benchmark": benchmark_name}
     best_metrics = baseline_metrics
 
-    _write_trace(
-        trace_path,
-        {
-            "benchmark": benchmark_name,
-            "candidate": "baseline",
-            "family": "baseline",
-            "recipe": best_recipe,
-            "metrics": baseline_metrics,
-            "delta_vs_baseline": 0.0,
-        },
-    )
+    baseline_record = {
+        "benchmark": benchmark_name,
+        "candidate": "baseline",
+        "family": "baseline",
+        "recipe": best_recipe,
+        "metrics": baseline_metrics,
+        "delta_vs_baseline": 0.0,
+    }
+    if benchmark is not None:
+        baseline_record["soft_positions"] = _soft_positions_record(
+            baseline_placement, int(benchmark.num_hard_macros)
+        )
+    _write_trace(trace_path, baseline_record)
 
     for candidate in candidates:
         metrics = _normalized_metrics(score_placement(candidate.placement))
@@ -478,18 +757,20 @@ def screen_candidates(
             best_name = candidate.name
             best_recipe = dict(candidate.recipe)
             best_metrics = metrics
-        _write_trace(
-            trace_path,
-            {
-                "benchmark": benchmark_name,
-                "candidate": candidate.name,
-                "family": candidate.family,
-                "recipe": candidate.recipe,
-                "metrics": metrics,
-                "delta_vs_baseline": delta,
-                "legal": legal,
-            },
-        )
+        record = {
+            "benchmark": benchmark_name,
+            "candidate": candidate.name,
+            "family": candidate.family,
+            "recipe": candidate.recipe,
+            "metrics": metrics,
+            "delta_vs_baseline": delta,
+            "legal": legal,
+        }
+        if benchmark is not None and candidate.family.startswith("soft_"):
+            record["soft_positions"] = _soft_positions_record(
+                candidate.placement, int(benchmark.num_hard_macros)
+            )
+        _write_trace(trace_path, record)
 
     return BenchmarkSearchResult(
         name=benchmark_name,
@@ -541,6 +822,9 @@ def screen_sequential_candidates(
             "hard_positions": _hard_positions_record(
                 current_placement, int(benchmark.num_hard_macros)
             ),
+            "soft_positions": _soft_positions_record(
+                current_placement, int(benchmark.num_hard_macros)
+            ),
         },
     )
 
@@ -590,6 +874,9 @@ def screen_sequential_candidates(
                     "hard_positions": _hard_positions_record(
                         current_placement, int(benchmark.num_hard_macros)
                     ),
+                    "soft_positions": _soft_positions_record(
+                        current_placement, int(benchmark.num_hard_macros)
+                    ),
                 },
             )
             break
@@ -619,6 +906,9 @@ def screen_sequential_candidates(
                 "accepted": True,
                 "sequence": accepted_sequence,
                 "hard_positions": _hard_positions_record(
+                    current_placement, int(benchmark.num_hard_macros)
+                ),
+                "soft_positions": _soft_positions_record(
                     current_placement, int(benchmark.num_hard_macros)
                 ),
             },
@@ -654,6 +944,11 @@ def screen_sequential_candidates(
 def _hard_positions_record(placement: torch.Tensor, n_hard: int) -> list[list[float]]:
     hard = placement[:n_hard].detach().cpu().numpy().astype(np.float64, copy=False)
     return [[round(float(x), 6), round(float(y), 6)] for x, y in hard.tolist()]
+
+
+def _soft_positions_record(placement: torch.Tensor, n_hard: int) -> list[list[float]]:
+    soft = placement[n_hard:].detach().cpu().numpy().astype(np.float64, copy=False)
+    return [[round(float(x), 6), round(float(y), 6)] for x, y in soft.tolist()]
 
 
 def _normalized_metrics(raw: dict[str, object]) -> dict[str, object]:
@@ -712,6 +1007,7 @@ def run_benchmark_search(
     else:
         candidates = generate_candidates(benchmark, baseline_placement, config)
         result = screen_candidates(
+            benchmark=benchmark,
             benchmark_name=name,
             baseline_placement=baseline_placement,
             candidates=candidates,
@@ -853,7 +1149,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--families",
         default="single,swap,density,transform",
-        help="Comma-separated candidate families: single,swap,density,transform.",
+        help=(
+            "Comma-separated candidate families: single,swap,density,transform,"
+            "soft_density,soft_net_pull,soft_relax."
+        ),
     )
     parser.add_argument(
         "--step-fractions",
